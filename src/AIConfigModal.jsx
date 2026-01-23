@@ -2,32 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Settings, X } from "lucide-react";
 
-/**
- * AIConfigModal
- * -------------
- * 用途：在管理员/运营后台里配置 AI Provider 组合（竞品提取 & 方案生成）
- *
- * 需求要点：
- * - React 函数组件
- * - localStorage 读写（key: 'ai_config'）
- * - 单选按钮选择 AI 提供商
- * - 两个区块：Extract / Plan
- * - 显示：名称、描述、成本($)
- * - 推荐组合提示
- * - 保存：写 localStorage + onSave + onClose
- *
- * Props:
- * - isOpen: boolean
- * - onClose: () => void
- * - onSave: (config) => void
- */
-
 const STORAGE_KEY = "ai_config";
-
-const DEFAULT_CONFIG = {
-  extractProvider: "gemini",
-  planProvider: "claude",
-};
 
 const PROVIDERS = {
   gemini: {
@@ -45,9 +20,32 @@ const PROVIDERS = {
   gpt4: {
     id: "gpt4",
     name: "GPT-4",
-    desc: "通用能力强，表现均衡，适合多场景兼容与工程落地。",
+    desc: "通用能力强，兼容性高，适合工程落地与兜底。",
     cost: "$$",
   },
+  qwen: {
+    id: "qwen",
+    name: "千问 Qwen",
+    desc: "中文友好、成本可控，适合结构化输出与通用文本任务。",
+    cost: "$",
+  },
+  ark: {
+    id: "ark",
+    name: "火山 Ark（豆包）",
+    desc: "国内稳定，适合企业网络环境与中等成本场景。",
+    cost: "$$",
+  },
+  deepseek: {
+    id: "deepseek",
+    name: "DeepSeek",
+    desc: "性价比很高，推理强，适合预算敏感场景。",
+    cost: "$",
+  },
+};
+
+const DEFAULT_CONFIG = {
+  extract_provider: "gemini",
+  generate_provider: "claude",
 };
 
 function safeReadConfig() {
@@ -55,27 +53,35 @@ function safeReadConfig() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_CONFIG;
     const parsed = JSON.parse(raw);
-    // 轻量校验，避免脏数据把 UI 卡死
-    const extractProvider =
-      parsed?.extractProvider && PROVIDERS[parsed.extractProvider] ? parsed.extractProvider : DEFAULT_CONFIG.extractProvider;
-    const planProvider =
-      parsed?.planProvider && PROVIDERS[parsed.planProvider] ? parsed.planProvider : DEFAULT_CONFIG.planProvider;
 
-    return { extractProvider, planProvider };
+    // 兼容旧字段
+    const extract_provider =
+      parsed?.extract_provider ||
+      parsed?.extractProvider ||
+      DEFAULT_CONFIG.extract_provider;
+
+    const generate_provider =
+      parsed?.generate_provider ||
+      parsed?.planProvider ||
+      parsed?.generateProvider ||
+      DEFAULT_CONFIG.generate_provider;
+
+    return {
+      extract_provider: PROVIDERS[extract_provider] ? extract_provider : DEFAULT_CONFIG.extract_provider,
+      generate_provider: PROVIDERS[generate_provider] ? generate_provider : DEFAULT_CONFIG.generate_provider,
+    };
   } catch {
     return DEFAULT_CONFIG;
   }
 }
 
-function safeWriteConfig(config) {
+function safeWriteConfig(cfg) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  } catch {
-    // localStorage 在隐私模式/权限受限可能失败
-  }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+  } catch {}
 }
 
-function ProviderOption({ groupName, value, selected, onChange, disabled = false }) {
+function ProviderOption({ groupName, value, selected, onChange }) {
   const p = PROVIDERS[value];
   const active = selected === value;
 
@@ -84,7 +90,6 @@ function ProviderOption({ groupName, value, selected, onChange, disabled = false
       className={[
         "group relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition",
         active ? "border-indigo-500 bg-indigo-50" : "border-zinc-200 bg-white hover:bg-zinc-50",
-        disabled ? "cursor-not-allowed opacity-60" : "",
       ].join(" ")}
     >
       <input
@@ -92,9 +97,8 @@ function ProviderOption({ groupName, value, selected, onChange, disabled = false
         name={groupName}
         value={value}
         checked={active}
-        onChange={() => !disabled && onChange(value)}
+        onChange={() => onChange(value)}
         className="mt-1 h-4 w-4 accent-indigo-600"
-        disabled={disabled}
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
@@ -142,21 +146,15 @@ function RecommendationCard({ title, desc, isActive }) {
 }
 
 export default function AIConfigModal({ isOpen, onClose, onSave }) {
-  const [extractProvider, setExtractProvider] = useState(DEFAULT_CONFIG.extractProvider);
-  const [planProvider, setPlanProvider] = useState(DEFAULT_CONFIG.planProvider);
+  const [extract_provider, setExtract] = useState(DEFAULT_CONFIG.extract_provider);
+  const [generate_provider, setGenerate] = useState(DEFAULT_CONFIG.generate_provider);
 
-  // 打开弹窗时读取 localStorage，保证“管理员改完下次打开还能看到”
   useEffect(() => {
     if (!isOpen) return;
     const cfg = safeReadConfig();
-    setExtractProvider(cfg.extractProvider);
-    setPlanProvider(cfg.planProvider);
+    setExtract(cfg.extract_provider);
+    setGenerate(cfg.generate_provider);
   }, [isOpen]);
-
-  const config = useMemo(
-    () => ({ extractProvider, planProvider }),
-    [extractProvider, planProvider]
-  );
 
   const recommendations = useMemo(() => {
     return [
@@ -164,36 +162,39 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
         key: "value_best",
         title: "性价比最佳",
         desc: "Gemini（竞品提取） + Claude（方案生成）",
-        match: extractProvider === "gemini" && planProvider === "claude",
+        match: extract_provider === "gemini" && generate_provider === "claude",
       },
       {
         key: "quality_first",
         title: "质量优先",
         desc: "Claude（竞品提取） + Claude（方案生成）",
-        match: extractProvider === "claude" && planProvider === "claude",
+        match: extract_provider === "claude" && generate_provider === "claude",
       },
       {
         key: "budget_limited",
         title: "预算有限",
         desc: "Gemini（竞品提取） + Gemini（方案生成）",
-        match: extractProvider === "gemini" && planProvider === "gemini",
+        match: extract_provider === "gemini" && generate_provider === "gemini",
+      },
+      {
+        key: "cn_stable",
+        title: "国内更稳",
+        desc: "Ark（竞品提取） + Ark（方案生成）",
+        match: extract_provider === "ark" && generate_provider === "ark",
       },
     ];
-  }, [extractProvider, planProvider]);
+  }, [extract_provider, generate_provider]);
 
   const handleSave = () => {
-    const cfg = { extractProvider, planProvider };
+    const cfg = { extract_provider, generate_provider };
     safeWriteConfig(cfg);
-    if (typeof onSave === "function") onSave(cfg);
-    if (typeof onClose === "function") onClose();
+    onSave?.(cfg);
+    onClose?.();
   };
 
-  // ESC 关闭
   useEffect(() => {
     if (!isOpen) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") onClose?.();
-    };
+    const onKeyDown = (e) => e.key === "Escape" && onClose?.();
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
@@ -202,15 +203,9 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={() => onClose?.()}
-      />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => onClose?.()} />
 
-      {/* Modal */}
-      <div className="relative z-10 w-[92vw] max-w-3xl rounded-2xl bg-white shadow-2xl">
-        {/* Header */}
+      <div className="relative z-10 w-[92vw] max-w-4xl rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-4">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white">
@@ -218,9 +213,7 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
             </div>
             <div>
               <div className="text-base font-semibold text-zinc-900">AI 配置</div>
-              <div className="text-xs text-zinc-500">
-                选择不同环节使用的 AI 提供商（仅开放可改部分）
-              </div>
+              <div className="text-xs text-zinc-500">选择不同环节使用的 AI 提供商（仅开放可改部分）</div>
             </div>
           </div>
 
@@ -233,12 +226,10 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-5 py-5">
-          {/* Recommendations */}
           <div className="mb-5">
             <div className="mb-2 text-sm font-semibold text-zinc-900">推荐配置</div>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               {recommendations.map((r) => (
                 <RecommendationCard key={r.key} title={r.title} desc={r.desc} isActive={r.match} />
               ))}
@@ -246,7 +237,6 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
-            {/* Extract */}
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <div className="mb-3">
                 <div className="text-sm font-semibold text-zinc-900">竞品提取使用</div>
@@ -254,28 +244,18 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
               </div>
 
               <div className="space-y-3">
-                <ProviderOption
-                  groupName="extract_provider"
-                  value="gemini"
-                  selected={extractProvider}
-                  onChange={setExtractProvider}
-                />
-                <ProviderOption
-                  groupName="extract_provider"
-                  value="claude"
-                  selected={extractProvider}
-                  onChange={setExtractProvider}
-                />
-                <ProviderOption
-                  groupName="extract_provider"
-                  value="gpt4"
-                  selected={extractProvider}
-                  onChange={setExtractProvider}
-                />
+                {["gemini", "deepseek", "qwen", "ark", "claude", "gpt4"].map((p) => (
+                  <ProviderOption
+                    key={p}
+                    groupName="extract_provider"
+                    value={p}
+                    selected={extract_provider}
+                    onChange={setExtract}
+                  />
+                ))}
               </div>
             </div>
 
-            {/* Plan */}
             <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <div className="mb-3">
                 <div className="text-sm font-semibold text-zinc-900">方案生成使用</div>
@@ -283,52 +263,40 @@ export default function AIConfigModal({ isOpen, onClose, onSave }) {
               </div>
 
               <div className="space-y-3">
-                {/* 按你要求顺序：Claude / GPT-4 / Gemini */}
-                <ProviderOption
-                  groupName="plan_provider"
-                  value="claude"
-                  selected={planProvider}
-                  onChange={setPlanProvider}
-                />
-                <ProviderOption
-                  groupName="plan_provider"
-                  value="gpt4"
-                  selected={planProvider}
-                  onChange={setPlanProvider}
-                />
-                <ProviderOption
-                  groupName="plan_provider"
-                  value="gemini"
-                  selected={planProvider}
-                  onChange={setPlanProvider}
-                />
+                {["claude", "gpt4", "gemini", "deepseek", "qwen", "ark"].map((p) => (
+                  <ProviderOption
+                    key={p}
+                    groupName="generate_provider"
+                    value={p}
+                    selected={generate_provider}
+                    onChange={setGenerate}
+                  />
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Current */}
           <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4">
             <div className="text-sm font-semibold text-zinc-900">当前选择</div>
             <div className="mt-2 grid gap-2 text-sm text-zinc-700 md:grid-cols-2">
               <div className="rounded-xl bg-zinc-50 px-3 py-2">
                 <span className="text-zinc-500">竞品提取：</span>
-                <span className="font-semibold text-zinc-900">{PROVIDERS[extractProvider].name}</span>
-                <span className="ml-2 text-xs text-zinc-500">{PROVIDERS[extractProvider].cost}</span>
+                <span className="font-semibold text-zinc-900">{PROVIDERS[extract_provider].name}</span>
+                <span className="ml-2 text-xs text-zinc-500">{PROVIDERS[extract_provider].cost}</span>
               </div>
               <div className="rounded-xl bg-zinc-50 px-3 py-2">
                 <span className="text-zinc-500">方案生成：</span>
-                <span className="font-semibold text-zinc-900">{PROVIDERS[planProvider].name}</span>
-                <span className="ml-2 text-xs text-zinc-500">{PROVIDERS[planProvider].cost}</span>
+                <span className="font-semibold text-zinc-900">{PROVIDERS[generate_provider].name}</span>
+                <span className="ml-2 text-xs text-zinc-500">{PROVIDERS[generate_provider].cost}</span>
               </div>
             </div>
 
             <div className="mt-3 text-xs text-zinc-500">
-              提示：保存后会写入 <span className="font-mono">localStorage['ai_config']</span>，并通过回调同步到你的应用状态。
+              提示：保存后会写入 <span className="font-mono">localStorage['ai_config']</span>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-5 py-4">
           <button
             onClick={() => onClose?.()}
