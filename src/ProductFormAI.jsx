@@ -10,10 +10,18 @@ import { getCurrentBeijingISO } from "./timeConfig";
  * -------------
  * 一个全新的 AI 辅助创建产品表单（分步垂直堆叠）
  *
- * Props:
- * - onClose: () => void
- * - onSuccess: () => void
- * - currentUser: object
+ * ✅ 本版升级点：
+ * 1) Provider 扩展：Gemini / Claude / GPT-4 + Qwen(千问) / VolcEngine(火山) / DeepSeek
+ * 2) 竞品提取支持两种方式：
+ *    - 方式A：粘贴链接 → AI 提取
+ *    - 方式B：上传截图（最多3张）→ AI 识图提取
+ *
+ * 重要说明（给后端对齐）：
+ * - 这里仍然调用同一个 API：extractCompetitorInfo(input, aiConfig)
+ * - input 可能是：
+ *   - string URL
+ *   - { mode:'image', images:[{name,type,dataUrl}], hint?:string }
+ * 后端只需要根据 input 类型分支处理即可。
  */
 
 const STORAGE_KEY = "ai_config";
@@ -22,7 +30,16 @@ const CATEGORIES = ["洗发水", "沐浴露", "身体乳", "护发素", "弹力�
 const MARKETS = ["美国", "印尼", "东南亚", "欧洲"];
 const PLATFORMS = ["Amazon", "TikTok", "Shopee", "Lazada"];
 
-const providerLabel = (p) => (p === "gpt4" ? "GPT-4" : p === "claude" ? "Claude" : "Gemini");
+const PROVIDER_META = {
+  gemini: { label: "Gemini" },
+  claude: { label: "Claude" },
+  gpt4: { label: "GPT-4" },
+  qwen: { label: "Qwen(千问)" },
+  volcengine: { label: "VolcEngine(火山)" },
+  deepseek: { label: "DeepSeek" },
+};
+
+const providerLabel = (p) => PROVIDER_META?.[p]?.label || String(p || "Unknown");
 
 const readAIConfig = () => {
   try {
@@ -31,9 +48,18 @@ const readAIConfig = () => {
     const parsed = JSON.parse(raw);
 
     // 兼容 AIConfigModal 的字段
-    const extract_provider = parsed.extract_provider || parsed.extractProvider || "gemini";
+    const extract_provider =
+      parsed.extract_provider ||
+      parsed.extractProvider ||
+      parsed.extract_provider_name ||
+      "gemini";
+
     const generate_provider =
-      parsed.generate_provider || parsed.planProvider || parsed.generateProvider || "claude";
+      parsed.generate_provider ||
+      parsed.planProvider ||
+      parsed.generateProvider ||
+      parsed.generate_provider_name ||
+      "claude";
 
     return { extract_provider, generate_provider };
   } catch {
@@ -65,6 +91,14 @@ const withTimeout = async (promise, ms = 60000) => {
     clearTimeout(t);
   }
 };
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("FILE_READ_FAIL"));
+    reader.readAsDataURL(file);
+  });
 
 const FieldRow = ({
   label,
@@ -137,16 +171,49 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   const [targetMarket, setTargetMarket] = useState("");
   const [targetPlatform, setTargetPlatform] = useState("");
 
-  // 3 competitor links + extraction results
+  // 3 competitors
   const [competitors, setCompetitors] = useState([
-    { url: "", loading: false, success: false, error: "", data: null, providerUsed: "" },
-    { url: "", loading: false, success: false, error: "", data: null, providerUsed: "" },
-    { url: "", loading: false, success: false, error: "", data: null, providerUsed: "" },
+    {
+      mode: "url", // 'url' | 'image'
+      url: "",
+      images: [], // File[]
+      imagePreviews: [], // string[]
+      hint: "",
+      loading: false,
+      success: false,
+      error: "",
+      data: null,
+      providerUsed: "",
+    },
+    {
+      mode: "url",
+      url: "",
+      images: [],
+      imagePreviews: [],
+      hint: "",
+      loading: false,
+      success: false,
+      error: "",
+      data: null,
+      providerUsed: "",
+    },
+    {
+      mode: "url",
+      url: "",
+      images: [],
+      imagePreviews: [],
+      hint: "",
+      loading: false,
+      success: false,
+      error: "",
+      data: null,
+      providerUsed: "",
+    },
   ]);
 
   // Plan generation
   const [planLoading, setPlanLoading] = useState(false);
-  const [planResult, setPlanResult] = useState(null); // object
+  const [planResult, setPlanResult] = useState(null);
   const [planProviderUsed, setPlanProviderUsed] = useState("");
 
   // Manual review/edit form
@@ -179,11 +246,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     targetPlatform,
   ]);
 
-  const extractedCount = useMemo(
-    () => competitors.filter((c) => c.success).length,
-    [competitors]
-  );
-
+  const extractedCount = useMemo(() => competitors.filter((c) => c.success).length, [competitors]);
   const step2Done = useMemo(() => step1Done && extractedCount === 3, [step1Done, extractedCount]);
   const step3Done = useMemo(() => step2Done && !!planResult, [step2Done, planResult]);
 
@@ -201,80 +264,125 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     return `${providerLabel(aiConfig.extract_provider)} / ${providerLabel(aiConfig.generate_provider)}`;
   }, [aiConfig]);
 
-  const updateCompetitorUrl = (idx, url) => {
-    setCompetitors((prev) =>
-      prev.map((c, i) =>
-        i === idx ? { ...c, url, success: false, error: "", data: null, providerUsed: "" } : c
-      )
-    );
+  const updateCompetitor = (idx, patch) => {
+    setCompetitors((prev) => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  };
+
+  const resetCompetitorResult = (idx) => {
+    updateCompetitor(idx, { success: false, error: "", data: null, providerUsed: "" });
+  };
+
+  const setCompetitorMode = (idx, mode) => {
+    updateCompetitor(idx, {
+      mode,
+      url: mode === "url" ? competitors[idx]?.url || "" : "",
+      images: mode === "image" ? competitors[idx]?.images || [] : [],
+      imagePreviews: mode === "image" ? competitors[idx]?.imagePreviews || [] : [],
+      hint: competitors[idx]?.hint || "",
+      loading: false,
+      success: false,
+      error: "",
+      data: null,
+      providerUsed: "",
+    });
+  };
+
+  const handlePickImages = async (idx, filesLike) => {
+    const files = Array.from(filesLike || []).filter((f) => f && String(f.type || "").startsWith("image/"));
+    if (files.length === 0) return;
+
+    const sliced = files.slice(0, 3); // 每个竞品最多3张
+    const previews = sliced.map((f) => URL.createObjectURL(f));
+
+    // 清理旧预览
+    try {
+      (competitors[idx]?.imagePreviews || []).forEach((u) => URL.revokeObjectURL(u));
+    } catch {
+      // ignore
+    }
+
+    updateCompetitor(idx, { images: sliced, imagePreviews: previews });
+    resetCompetitorResult(idx);
+  };
+
+  const clearImages = (idx) => {
+    try {
+      (competitors[idx]?.imagePreviews || []).forEach((u) => URL.revokeObjectURL(u));
+    } catch {
+      // ignore
+    }
+    updateCompetitor(idx, { images: [], imagePreviews: [] });
+    resetCompetitorResult(idx);
   };
 
   const handleExtractOne = async (idx) => {
     const item = competitors[idx];
-    const url = (item.url || "").trim();
-    if (!url) {
-      alert("请先输入竞品链接");
-      return;
+
+    // 校验输入
+    if (item.mode === "url") {
+      const url = (item.url || "").trim();
+      if (!url) {
+        alert("请先输入竞品链接");
+        return;
+      }
+    } else {
+      if (!item.images || item.images.length === 0) {
+        alert("请先上传截图（最多3张）");
+        return;
+      }
     }
 
-    setCompetitors((prev) =>
-      prev.map((c, i) => (i === idx ? { ...c, loading: true, error: "" } : c))
-    );
+    updateCompetitor(idx, { loading: true, error: "" });
 
     try {
-      const result = await withTimeout(extractCompetitorInfo(url, aiConfig), 60000);
+      let input;
+      if (item.mode === "url") {
+        input = (item.url || "").trim();
+      } else {
+        const dataUrls = await Promise.all(item.images.slice(0, 3).map(fileToDataUrl));
+        input = {
+          mode: "image",
+          images: item.images.slice(0, 3).map((f, i) => ({
+            name: f.name || `screenshot_${i + 1}.png`,
+            type: f.type || "image/png",
+            dataUrl: dataUrls[i],
+          })),
+          hint: (item.hint || "").trim(), // 可选：你可让用户写“这是商品详情页/成分表/评价页”
+        };
+      }
 
-      // 统一处理：result.success / result.data
+      // 统一调用：后端根据 input 类型分支处理
+      const result = await withTimeout(extractCompetitorInfo(input, aiConfig), 90000);
+
       if (!result?.success) {
-        const msg = result?.message || "提取失败，请检查链接或稍后重试";
-        setCompetitors((prev) =>
-          prev.map((c, i) =>
-            i === idx ? { ...c, loading: false, success: false, error: msg } : c
-          )
-        );
+        const msg = result?.message || "提取失败，请稍后重试";
+        updateCompetitor(idx, { loading: false, success: false, error: msg });
         alert(msg);
         return;
       }
 
-      // JSON 解析失败提示
       const dataObj = safeJson(result.data) ?? result.data;
       if (!dataObj || typeof dataObj !== "object") {
-        setCompetitors((prev) =>
-          prev.map((c, i) =>
-            i === idx
-              ? { ...c, loading: false, success: false, error: "AI 返回格式错误" }
-              : c
-          )
-        );
+        updateCompetitor(idx, { loading: false, success: false, error: "AI 返回格式错误" });
         alert("AI 返回格式错误");
         return;
       }
 
-      const providerUsed =
-        result.provider || result.providerUsed || aiConfig.extract_provider || "unknown";
+      const providerUsed = result.provider || result.providerUsed || aiConfig.extract_provider || "unknown";
 
-      setCompetitors((prev) =>
-        prev.map((c, i) =>
-          i === idx
-            ? {
-                ...c,
-                loading: false,
-                success: true,
-                error: "",
-                data: dataObj,
-                providerUsed,
-              }
-            : c
-        )
-      );
+      updateCompetitor(idx, {
+        loading: false,
+        success: true,
+        error: "",
+        data: dataObj,
+        providerUsed,
+      });
     } catch (e) {
       const msg =
         String(e?.message || e) === "NETWORK_TIMEOUT"
           ? "网络超时：请检查网络或稍后重试"
           : "提取失败：请稍后重试";
-      setCompetitors((prev) =>
-        prev.map((c, i) => (i === idx ? { ...c, loading: false, error: msg } : c))
-      );
+      updateCompetitor(idx, { loading: false, success: false, error: msg });
       alert(msg);
     }
   };
@@ -292,7 +400,8 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     const validCompetitors = competitors
       .filter((c) => c.success && c.data)
       .map((c) => ({
-        url: c.url,
+        input_mode: c.mode,
+        url: c.mode === "url" ? c.url : "",
         extracted: c.data,
       }));
 
@@ -309,7 +418,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         ai_config: aiConfig,
       };
 
-      const result = await withTimeout(generateProductPlan(payload), 90000);
+      const result = await withTimeout(generateProductPlan(payload), 120000);
 
       if (!result?.success) {
         const msg = result?.message || "生成失败，请稍后重试";
@@ -325,14 +434,10 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         return;
       }
 
-      const providerUsed =
-        result.provider || result.providerUsed || aiConfig.generate_provider || "unknown";
-
+      const providerUsed = result.provider || result.providerUsed || aiConfig.generate_provider || "unknown";
       setPlanProviderUsed(providerUsed);
       setPlanResult(dataObj);
 
-      // 把 AI 生成结果尽量映射到可编辑字段（字段不存在就留空）
-      // 你可以根据你后端返回的真实结构进一步调整映射
       const draft = dataObj.plan || dataObj; // 兼容 plan 包裹
       const explanations = dataObj.explanations || dataObj.ai_explanations || {};
 
@@ -342,8 +447,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         market: targetMarket,
         platform: targetPlatform,
         positioning: draft.positioning || prev.positioning,
-        sellingPoint:
-          draft.sellingPoint || draft.selling_point || draft.coreSellingPoints || prev.sellingPoint,
+        sellingPoint: draft.sellingPoint || draft.selling_point || draft.coreSellingPoints || prev.sellingPoint,
         ingredients: draft.ingredients || draft.mainIngredients || prev.ingredients,
         efficacy: draft.efficacy || draft.mainEfficacy || draft.claims || prev.efficacy,
         volume: draft.volume || draft.volumeMl || prev.volume,
@@ -355,15 +459,12 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         packaging: draft.packaging || draft.packagingRequirements || prev.packaging,
       }));
 
-      // 规范化 explanations 到字段级：{ field: { note, confidence, reason } }
       setAIExplain(() => {
         const out = {};
-        const get = (k) => explanations?.[k] || explanations?.[k?.toLowerCase()] || null;
+        const get = (k) => explanations?.[k] || explanations?.[String(k || "").toLowerCase()] || null;
 
         const mapField = (fieldKey, aliasKeys = []) => {
-          const cand = [fieldKey, ...aliasKeys]
-            .map((k) => get(k))
-            .find((v) => v && typeof v === "object");
+          const cand = [fieldKey, ...aliasKeys].map((k) => get(k)).find((v) => v && typeof v === "object");
           if (!cand) return;
           out[fieldKey] = {
             note: cand.note || cand.desc || cand.summary || "",
@@ -409,7 +510,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       return;
     }
 
-    // 简单必填校验
     if (!formData.category || !formData.market || !formData.platform) {
       alert("请先完成：类目/市场/平台");
       return;
@@ -427,7 +527,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           market: formData.market,
           platform: formData.platform,
 
-          // 可编辑字段（按你现有表结构自行对齐字段名）
           positioning: formData.positioning,
           selling_point: formData.sellingPoint,
           ingredients: formData.ingredients,
@@ -440,7 +539,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           keywords: formData.keywords,
           packaging_requirements: formData.packaging,
 
-          // 元信息
           developer_id: currentUser.id,
           stage: 1,
           status: "进行中",
@@ -482,29 +580,45 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       data?.product_name ||
       data?.productName ||
       "（未识别名称）";
+
     const price =
       data?.listing?.price?.current ||
       data?.price ||
       data?.current_price ||
       data?.currentPrice ||
       "";
+
     const ingredients =
       data?.content?.keyIngredients ||
       data?.ingredients ||
       data?.main_ingredients ||
       data?.mainIngredients ||
       [];
-    const efficacy =
-      data?.positioning?.coreClaims || data?.efficacy || data?.claims || data?.mainEfficacy || [];
 
-    const ingredientsText = Array.isArray(ingredients) ? ingredients.slice(0, 6).join("、") : String(ingredients || "");
-    const efficacyText = Array.isArray(efficacy) ? efficacy.slice(0, 6).join("、") : String(efficacy || "");
+    const efficacy =
+      data?.positioning?.coreClaims ||
+      data?.efficacy ||
+      data?.claims ||
+      data?.mainEfficacy ||
+      [];
+
+    const ingredientsText = Array.isArray(ingredients)
+      ? ingredients.slice(0, 6).join("、")
+      : String(ingredients || "");
+
+    const efficacyText = Array.isArray(efficacy)
+      ? efficacy.slice(0, 6).join("、")
+      : String(efficacy || "");
 
     return (
       <div className="rounded-2xl border border-emerald-400 bg-emerald-50 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-zinc-900">{name}</div>
+            <div className="mt-1 text-xs text-zinc-600">
+              <span className="font-semibold">方式：</span>
+              {item.mode === "url" ? "链接提取" : `截图提取（${item.images?.length || 0}张）`}
+            </div>
             <div className="mt-1 text-xs text-zinc-600">
               <span className="font-semibold">价格：</span>
               {price ? `IDR ${price}` : "—"}
@@ -537,7 +651,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           <div className="min-w-0">
             <div className="truncate text-base font-semibold text-zinc-900">AI 辅助创建产品</div>
             <div className="mt-1 text-xs text-zinc-500">
-              Step-by-step：先定类目/市场/平台 → 提取 3 个竞品 → 生成方案 → 人工审核 → 创建产品
+              Step-by-step：先定类目/市场/平台 → 提取 3 个竞品（链接或截图）→ 生成方案 → 人工审核 → 创建产品
             </div>
           </div>
 
@@ -664,40 +778,118 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             <div className="mt-5 rounded-3xl border border-zinc-200 bg-white p-5">
               <StepHeader
                 step={2}
-                title="竞品输入（3个链接 + AI 提取）"
+                title="竞品输入（支持链接 / 截图）"
                 done={step2Done}
-                subtitle="每个链接点击 🤖 AI提取，提取成功后会显示绿色卡片"
+                subtitle="每个竞品二选一：A 链接提取；B 上传截图（最多3张）识图提取"
               />
 
               <div className="mt-5 grid gap-4">
                 {competitors.map((c, idx) => (
                   <div key={idx} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                      <div className="flex-1">
-                        <div className="text-sm font-semibold text-zinc-900">
-                          竞品链接 {idx + 1}
-                        </div>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-                          placeholder="粘贴 Shopee/Amazon/TikTok 等竞品链接"
-                          value={c.url}
-                          onChange={(e) => updateCompetitorUrl(idx, e.target.value)}
-                        />
-                      </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-zinc-900">竞品 {idx + 1}</div>
 
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleExtractOne(idx)}
-                          disabled={c.loading}
-                          className={[
-                            "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-white",
-                            c.loading ? "bg-zinc-400" : "bg-indigo-600 hover:bg-indigo-700",
-                          ].join(" ")}
-                        >
-                          {c.loading ? <Loader className="h-4 w-4 animate-spin" /> : null}
-                          🤖 AI提取
-                        </button>
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-zinc-700">
+                          <input
+                            type="radio"
+                            name={`mode_${idx}`}
+                            checked={c.mode === "url"}
+                            onChange={() => setCompetitorMode(idx, "url")}
+                          />
+                          链接
+                        </label>
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-zinc-700">
+                          <input
+                            type="radio"
+                            name={`mode_${idx}`}
+                            checked={c.mode === "image"}
+                            onChange={() => setCompetitorMode(idx, "image")}
+                          />
+                          截图
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* URL Mode */}
+                    {c.mode === "url" ? (
+                      <div className="mt-3">
+                        <div className="text-xs text-zinc-500">方式A：粘贴链接（Shopee/Amazon/TikTok 等）</div>
+                        <input
+                          className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
+                          placeholder="粘贴竞品链接"
+                          value={c.url}
+                          onChange={(e) => {
+                            updateCompetitor(idx, { url: e.target.value });
+                            resetCompetitorResult(idx);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      /* Image Mode */
+                      <div className="mt-3">
+                        <div className="text-xs text-zinc-500">
+                          方式B：上传截图（最多3张，建议：详情页/成分表/评价页）
+                        </div>
+
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handlePickImages(idx, e.target.files)}
+                            className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-800 hover:file:bg-zinc-100"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => clearImages(idx)}
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+                          >
+                            清空截图
+                          </button>
+                        </div>
+
+                        <input
+                          className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
+                          placeholder="可选提示：例如“这是商品详情页/成分表/评价页”"
+                          value={c.hint || ""}
+                          onChange={(e) => {
+                            updateCompetitor(idx, { hint: e.target.value });
+                            resetCompetitorResult(idx);
+                          }}
+                        />
+
+                        {c.imagePreviews?.length ? (
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            {c.imagePreviews.map((src, i) => (
+                              <div key={i} className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                                <img src={src} alt={`preview_${idx}_${i}`} className="h-24 w-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-xs text-zinc-400">未选择截图</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleExtractOne(idx)}
+                        disabled={c.loading}
+                        className={[
+                          "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-white",
+                          c.loading ? "bg-zinc-400" : "bg-indigo-600 hover:bg-indigo-700",
+                        ].join(" ")}
+                      >
+                        {c.loading ? <Loader className="h-4 w-4 animate-spin" /> : null}
+                        🤖 AI提取
+                      </button>
+
+                      <div className="text-xs text-zinc-500">
+                        使用：<span className="font-semibold">{providerLabel(aiConfig.extract_provider)}</span>
                       </div>
                     </div>
 
@@ -706,7 +898,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                       {c.loading ? (
                         <div className="text-xs font-semibold text-zinc-600">
                           <Loader className="mr-2 inline h-4 w-4 animate-spin" />
-                          提取中…（使用 {providerLabel(aiConfig.extract_provider)}）
+                          提取中…（{c.mode === "url" ? "链接" : "截图"}）
                         </div>
                       ) : c.success ? (
                         <div className="text-xs font-semibold text-emerald-700">
@@ -795,9 +987,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                         ✅ 使用 {providerLabel(planProviderUsed || aiConfig.generate_provider)} 生成成功
                       </div>
                     </div>
-                    <div className="text-xs text-zinc-600">
-                      提示：下方 Step 4 可逐字段编辑，并保留 AI 置信度与理由
-                    </div>
+                    <div className="text-xs text-zinc-600">提示：下方 Step 4 可逐字段编辑，并保留 AI 置信度与理由</div>
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -889,9 +1079,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                     <div className="text-xs text-zinc-500">developer_id</div>
                     <div className="font-semibold text-zinc-900">{currentUser?.id || "—"}</div>
                   </div>
-                  <div className="mt-3 text-xs text-zinc-500">
-                    创建后：stage=1，status=进行中，created_at=北京时间 ISO
-                  </div>
+                  <div className="mt-3 text-xs text-zinc-500">创建后：stage=1，status=进行中，created_at=北京时间 ISO</div>
                 </div>
               </div>
 
@@ -1012,9 +1200,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
               </div>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-zinc-500">
-                  提示：如果后端未返回 explanations，你也可以先保存，后续再迭代 AI 协议层。
-                </div>
+                <div className="text-xs text-zinc-500">提示：如果后端未返回 explanations，你也可以先保存，后续再迭代提示词与结构。</div>
 
                 <button
                   type="button"
