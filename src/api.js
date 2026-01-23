@@ -340,12 +340,40 @@ export async function createBottle(data) {
  * @param {string} url 竞品链接
  * @param {{ extract_provider?: 'gemini'|'claude'|'gpt4', generate_provider?: 'gemini'|'claude'|'gpt4' }} aiConfig
  */
-export async function extractCompetitorInfo(url, aiConfig = {}) {
-  const res = await fetch('/api/extract-competitor', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, ai_config: aiConfig }),
-  })
+/**
+ * input 支持两种形式：
+ * 1) string: url
+ * 2) object: { url?: string, images?: [{ data: base64, mime_type: string }] }
+ */
+export async function extractCompetitorInfo(input, aiConfig = {}) {
+  const payload =
+    typeof input === "string"
+      ? { url: input, ai_config: aiConfig }
+      : { ...input, ai_config: aiConfig };
+
+  const res = await fetch("/api/extract-competitor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text().catch(() => "");
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {}
+
+  if (!res.ok) {
+    const msg = (json && (json.error || json.message)) || text || `HTTP_${res.status}`;
+    throw new Error(msg);
+  }
+  if (!json) throw new Error("AI 返回格式错误");
+  return json;
+}
+
+
+
+
 
   const text = await res.text().catch(() => '')
   let json = null
