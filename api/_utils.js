@@ -42,7 +42,10 @@ export function requirePost(req, res) {
  */
 export function normalizeProvider(p) {
   const v = String(p || "").toLowerCase().trim();
-  if (v === "gpt4" || v === "openai" || v === "gpt-4") return "gpt4";
-  if (v === "claude" || v === "anthropic") return "claude";
+  if (["gpt4", "openai", "gpt-4", "gpt4o"].includes(v)) return "gpt4";
+  if (["claude", "anthropic"].includes(v)) return "claude";
+  if (["qwen", "dashscope"].includes(v)) return "qwen";
+  if (["ark", "doubao", "volc", "volces"].includes(v)) return "ark";
+  if (["deepseek"].includes(v)) return "deepseek";
   return "gemini";
 }
