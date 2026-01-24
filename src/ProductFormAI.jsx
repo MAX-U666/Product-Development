@@ -2,7 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, Loader, CheckCircle, AlertCircle, Settings } from "lucide-react";
 import AIConfigModal from "./AIConfigModal";
-import { extractCompetitorInfo, generateProductPlan, insertData } from "./api";
+import { extractCompetitorInfo, generateProductPlan, insertData, insertAIDraft } from "./api";
+
 import { getCurrentBeijingISO } from "./timeConfig";
 
 /**
@@ -440,6 +441,22 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       const providerUsed = result.provider || result.providerUsed || aiConfig.generate_provider || "unknown";
       setPlanProviderUsed(providerUsed);
       setPlanResult(dataObj);
+      // ✅ 生成成功后：自动保存 AI 草稿（ai_drafts）
+      try {
+        await insertAIDraft({
+          created_by: currentUser?.id || null,
+          category,
+          market: targetMarket,
+          platform: targetPlatform,
+          competitors: validCompetitors, // 你上面整理后的竞品数组（已扁平化）
+          plan: dataObj,                 // 原样存整份 AI 返回（包含 plan/explanations 也行）
+          status: "draft",
+          created_at: getCurrentBeijingISO(),
+        });
+      } catch (e) {
+        // 草稿失败不阻塞主流程：不影响用户继续创建产品
+        console.warn("save ai_draft failed:", e);
+      }
 
       const draft = dataObj.plan || dataObj;
       const explanations = dataObj.explanations || dataObj.ai_explanations || {};
