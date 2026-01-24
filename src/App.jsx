@@ -1,3 +1,4 @@
+// File: src/App.jsx
 import React, { useState, useEffect } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles } from 'lucide-react'
 import { fetchData, deleteData } from './api'
@@ -8,6 +9,7 @@ import ProductFormAI from './ProductFormAI'
 import ProductDetail from './ProductDetail'
 import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
+import AIDraftDashboard from './AIDraftDashboard'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -26,7 +28,7 @@ export default function App() {
       try {
         const user = JSON.parse(savedUser)
         setCurrentUser(user)
-        
+
         // 根据角色自动跳转初始 Tab
         if (user.role === '设计师') {
           setActiveTab('designer')
@@ -47,10 +49,7 @@ export default function App() {
   async function loadData() {
     setLoading(true)
     try {
-      const [usersData, productsData] = await Promise.all([
-        fetchData('users'),
-        fetchData('products')
-      ])
+      const [usersData, productsData] = await Promise.all([fetchData('users'), fetchData('products')])
       setUsers(usersData || [])
       setProducts(productsData || [])
     } catch (error) {
@@ -75,7 +74,7 @@ export default function App() {
   function handleLogout() {
     setCurrentUser(null)
     setActiveTab('dashboard')
-    localStorage.removeItem('currentUser')  // ✅ 清除缓存
+    localStorage.removeItem('currentUser') // ✅ 清除缓存
   }
 
   async function handleDeleteProduct(product) {
@@ -179,6 +178,7 @@ export default function App() {
           >
             📊 数据总览
           </button>
+
           <button
             onClick={() => setActiveTab('products')}
             className={`px-4 py-3 border-b-2 transition-colors ${
@@ -212,9 +212,23 @@ export default function App() {
                 activeTab === 'content'
                   ? 'border-blue-600 text-blue-600 font-medium'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
-              }`}
+            }`}
             >
               ✍️ 内容策划
+            </button>
+          )}
+
+          {/* 🤖 AI 草稿（管理员 / 开发人员） */}
+          {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+            <button
+              onClick={() => setActiveTab('ai_drafts')}
+              className={`px-4 py-3 border-b-2 transition-colors ${
+                activeTab === 'ai_drafts'
+                  ? 'border-purple-600 text-purple-600 font-medium'
+                  : 'border-transparent text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              🤖 AI 草稿
             </button>
           )}
         </div>
@@ -312,9 +326,7 @@ export default function App() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{currentOwner}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            {product.order_count || 0}单
-                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{product.order_count || 0}单</td>
 
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -356,22 +368,22 @@ export default function App() {
         {activeTab === 'content' && (currentUser.role === '内容人员' || currentUser.role === '管理员') && (
           <ContentDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
+
+        {/* 🤖 AI 草稿 */}
+        {activeTab === 'ai_drafts' && (currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+          <AIDraftDashboard
+            currentUser={currentUser}
+            onCreateProduct={() => setShowProductFormAI(true)}
+          />
+        )}
       </div>
 
       {showProductForm && (
-        <ProductForm
-          currentUser={currentUser}
-          onClose={() => setShowProductForm(false)}
-          onSuccess={loadData}
-        />
+        <ProductForm currentUser={currentUser} onClose={() => setShowProductForm(false)} onSuccess={loadData} />
       )}
 
       {showProductFormAI && (
-        <ProductFormAI
-          currentUser={currentUser}
-          onClose={() => setShowProductFormAI(false)}
-          onSuccess={loadData}
-        />
+        <ProductFormAI currentUser={currentUser} onClose={() => setShowProductFormAI(false)} onSuccess={loadData} />
       )}
 
       {selectedProduct && (
