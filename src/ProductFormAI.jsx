@@ -540,6 +540,79 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       return;
     }
 
+const handleSubmit = async () => {
+  // ✅ 不再要求 currentUser.id（可以为空）
+  // ✅ 不再写 products，只写 ai_drafts
+
+  if (!formData.category || !formData.market || !formData.platform) {
+    alert("请先完成：类目/市场/平台");
+    return;
+  }
+  if (!formData.title) {
+    alert("请填写产品标题（可先用 AI 方案生成再微调）");
+    return;
+  }
+
+  try {
+    const draftPayload = {
+      developMonth: formData.developMonth,
+      category: formData.category,
+      market: formData.market,
+      platform: formData.platform,
+
+      positioning: formData.positioning,
+      sellingPoint: formData.sellingPoint,
+      ingredients: formData.ingredients,
+      efficacy: formData.efficacy,
+      volume: formData.volume,
+      scent: formData.scent,
+      color: formData.color,
+      pricing: formData.pricing,
+      title: formData.title,
+      keywords: formData.keywords,
+      packaging: formData.packaging,
+
+      competitors: competitors
+        .filter((c) => c.success && c.data)
+        .map((c) => ({
+          mode: c.mode,
+          url: c.url || "",
+          data: c.data || null,
+          providerUsed: c.providerUsed || "",
+        })),
+
+      ai_config: aiConfig,
+      ai_explain: aiExplain,
+      plan_provider_used: planProviderUsed,
+    };
+
+    await withTimeout(
+      insertAIDraft({
+        status: "draft",
+        category: formData.category,
+        market: formData.market,
+        platform: formData.platform,
+        payload: draftPayload,                // ✅ 全量 JSON 一把梭
+        created_by: currentUser?.id || null,  // ✅ 没有也行
+      }),
+      60000
+    );
+
+    alert("✅ 草稿已保存，可在「AI 草稿」里查看");
+    onSuccess?.();  // 让外层刷新（如果你想）
+    onClose?.();    // 保存后自动关闭（你不想关也可以删掉这一行）
+  } catch (e) {
+    const msg =
+      String(e?.message || e) === "NETWORK_TIMEOUT"
+        ? "网络超时：保存草稿失败，请稍后重试"
+        : `保存草稿失败：${String(e?.message || "").slice(0, 200) || "请稍后重试"}`;
+    alert(msg);
+  }
+};
+
+
+
+    
     try {
       await withTimeout(
         insertData("products", {
@@ -1172,7 +1245,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
                 >
                   <CheckCircle className="h-4 w-4" />
-                  创建产品
+                  保存草稿
                 </button>
               </div>
             </div>
