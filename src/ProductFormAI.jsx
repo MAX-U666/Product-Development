@@ -2,7 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, Loader, CheckCircle, AlertCircle, Settings } from "lucide-react";
 import AIConfigModal from "./AIConfigModal";
-import { extractCompetitorInfo, generateProductPlan, insertData, insertAIDraft } from "./api";
+import { extractCompetitorInfo, generateProductPlan, insertAIDraft } from "./api";
+
 
 import { getCurrentBeijingISO } from "./timeConfig";
 
