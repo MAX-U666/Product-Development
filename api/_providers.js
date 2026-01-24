@@ -1,11 +1,4 @@
-/**
- * Provider adapters (server-side only)
- *
- * Notes:
- * - Gemini REST: https://ai.google.dev/api/generate-content
- * - Claude Messages API: https://api.anthropic.com/v1/messages
- * - OpenAI Responses API: /v1/responses
- */
+// api/_providers.js
 
 function requireEnv(name) {
   const v = process.env[name];
@@ -13,214 +6,98 @@ function requireEnv(name) {
   return v;
 }
 
-// 调用 Gemini API
-export async function callGemini(prompt) {
-  const key = requireEnv("GEMINI_API_KEY");
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash-001";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
-
-  const body = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      // 让模型尽量按 JSON 返回（不保证 100%）
-      responseMimeType: "application/json",
-      temperature: 0.2,
-    },
-  };
+// DeepSeek API（OpenAI 兼容格式）
+export async function callDeepSeek(prompt) {
+  const key = requireEnv("DEEPSEEK_API_KEY");
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const url = "https://api.deepseek.com/chat/completions"; // OpenAI 兼容路径
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-    throw new Error(`GEMINI_ERROR:${msg}`);
-  }
-
-  const text = json?.candidates?.[0]?.content?.parts?.map(p => p?.text).filter(Boolean).join("") || "";
-  return text.trim();
-}
-
-// 调用 Claude API
-export async function callClaude(prompt) {
-  const key = requireEnv("ANTHROPIC_API_KEY");
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1800,
-      temperature: 0.2,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  const json = await res.json().catch(() => null);
-  if (!res.ok) {
-    const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-    throw new Error(`CLAUDE_ERROR:${msg}`);
-  }
-
-  // Claude 返回 content 数组
-  const text =
-    json?.content
-      ?.filter((c) => c?.type === "text")
-      ?.map((c) => c?.text)
-      ?.join("") || "";
-  return text.trim();
-}
-
-// 提取 OpenAI 返回的文本
-function extractOpenAIText(resp) {
-  const out = resp?.output || [];
-  const texts = [];
-  for (const item of out) {
-    const content = item?.content || [];
-    for (const c of content) {
-      if (c?.type === "output_text" && c?.text) texts.push(c.text);
-    }
-  }
-  return texts.join("").trim();
-}
-
-// 调用 OpenAI API
-export async function callOpenAI(prompt) {
-  const key = requireEnv("OPENAI_API_KEY");
-  const model = process.env.OPENAI_MODEL || "gpt-4.1";
-  const res = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model,
-      input: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: prompt }],
-        },
+      messages: [
+        { role: "system", content: "" },
+        { role: "user", content: prompt },
       ],
-      max_output_tokens: 1800,
-      temperature: 0.2,
     }),
   });
+  const json = await res.json();
 
-  const json = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-    throw new Error(`OPENAI_ERROR:${msg}`);
+    const msg = json.error?.message || JSON.stringify(json);
+    throw new Error(`DEEPSEEK_ERROR:${msg}`);
   }
 
-  return extractOpenAIText(json);
+  // 默认返回内容在 choices[0]?.message?.content
+  const text = json.choices?.[0]?.message?.content || "";
+  return text.trim();
 }
 
-// 调用 DeepSeek API
-export async function callDeepSeek(prompt) {
-  const key = requireEnv("DEEPSEEK_API_KEY");
-  const url = 'https://api.deepseek.ai/v1/your-endpoint'; // 替换为 DeepSeek 的实际 API 地址
-
-  const body = {
-    model: process.env.DEEPSEEK_MODEL || "deepseek-model",  // 模型名，需根据需求替换
-    input: { prompt },
-  };
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    const json = await res.json();
-    if (!res.ok) {
-      const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-      throw new Error(`DEEPSEEK_ERROR:${msg}`);
-    }
-
-    const text = json?.response || "";
-    return text.trim();
-  } catch (error) {
-    console.error('Error calling DeepSeek API:', error);
-    throw error;
-  }
-}
-
-// 调用 Qwen（千问）API
+// 通义千问（Qwen） API（OpenAI 兼容 / compatible-mode）
 export async function callQwen(prompt) {
   const key = requireEnv("DASHSCOPE_API_KEY");
-  const url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';  // 千问接口地址
+  const model = process.env.DASHSCOPE_MODEL || "qwen-plus";
+  // 兼容方式的 Base URL（国内外命名略不同）
+  const baseURL = process.env.DASHSCOPE_BASE_URL
+    || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  const url = `${baseURL}/chat/completions`;
 
-  const body = {
-    model: process.env.DASHSCOPE_MODEL || "qwen-max",  // 根据需求替换模型名
-    input: { prompt },
-  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: "" },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  const json = await res.json();
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    const json = await res.json();
-    if (!res.ok) {
-      const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-      throw new Error(`QWEN_ERROR:${msg}`);
-    }
-
-    const text = json?.response || "";
-    return text.trim();
-  } catch (error) {
-    console.error('Error calling Qwen API:', error);
-    throw error;
+  if (!res.ok) {
+    const msg = json.error?.message || JSON.stringify(json);
+    throw new Error(`QWEN_ERROR:${msg}`);
   }
+
+  const text = json.choices?.[0]?.message?.content || "";
+  return text.trim();
 }
 
-// 调用 Ark API
+// Ark API — 需要提供真实文档 URL/结构
 export async function callArk(prompt) {
   const key = requireEnv("ARK_API_KEY");
-  const url = 'https://api.ark.ai/v1/your-endpoint';  // 替换为 Ark 的实际 API 地址
+  const model = process.env.ARK_MODEL || "";
+  const url = process.env.ARK_BASE_URL; // 需要你定义
 
-  const body = {
-    model: process.env.ARK_MODEL || "ark-model",  // 模型名，需根据需求替换
-    input: { prompt },
-  };
+  if (!url) throw new Error("MISSING_ENV:ARK_BASE_URL");
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      prompt, // 假设结构
+    }),
+  });
+  const json = await res.json();
 
-    const json = await res.json();
-    if (!res.ok) {
-      const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-      throw new Error(`ARK_ERROR:${msg}`);
-    }
-
-    const text = json?.response || "";
-    return text.trim();
-  } catch (error) {
-    console.error('Error calling Ark API:', error);
-    throw error;
+  if (!res.ok) {
+    const msg = json.error?.message || JSON.stringify(json);
+    throw new Error(`ARK_ERROR:${msg}`);
   }
+
+  // 需要根据实际文档调整解析字段
+  return json.result || "";
 }
