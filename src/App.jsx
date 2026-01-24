@@ -20,6 +20,27 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // ✅ 从 localStorage 恢复用户登录状态
+    const savedUser = localStorage.getItem('currentUser')
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser)
+        setCurrentUser(user)
+        
+        // 根据角色自动跳转初始 Tab
+        if (user.role === '设计师') {
+          setActiveTab('designer')
+        } else if (user.role === '内容人员') {
+          setActiveTab('content')
+        } else {
+          setActiveTab('dashboard')
+        }
+      } catch (e) {
+        console.error('恢复用户状态失败:', e)
+        localStorage.removeItem('currentUser')
+      }
+    }
+
     loadData()
   }, [])
 
@@ -54,6 +75,7 @@ export default function App() {
   function handleLogout() {
     setCurrentUser(null)
     setActiveTab('dashboard')
+    localStorage.removeItem('currentUser')  // ✅ 清除缓存
   }
 
   async function handleDeleteProduct(product) {
