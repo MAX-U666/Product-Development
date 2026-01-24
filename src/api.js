@@ -480,3 +480,49 @@ export async function updateAIDraftStatus(id, action, reviewedBy = null, comment
   return rows[0]
 }
 
+
+// ================= AI Drafts（Supabase REST）=================
+
+export async function fetchAIDrafts() {
+  const url = `${SB_URL}/rest/v1/ai_drafts?order=created_at.desc`
+  const res = await fetch(url, { headers: baseHeaders() })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function insertAIDraft(data) {
+  const url = `${SB_URL}/rest/v1/ai_drafts`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: baseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify([data]),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows[0]
+}
+
+export async function updateAIDraftStatus(id, action, reviewedBy = null, comment = '') {
+  const url = `${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`
+  const patch = {
+    status: action, // approved / rejected / draft
+    reviewed_by: reviewedBy,
+    reviewed_at: new Date().toISOString(),
+    review_comment: comment || '',
+  }
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: baseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows[0]
+}
+
