@@ -510,9 +510,10 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   // ✅ 新增：保存草稿函数
   const handleSaveDraft = async () => {
     // ✅ 兼容多种用户对象结构
-    const userId = currentUser?.id || currentUser?.user_id || currentUser?.userId;
+    const userId = currentUser?.id ?? currentUser?.user_id ?? currentUser?.userId;
     
-    if (!userId) {
+    // ✅ 修复：使用严格检查，允许 id 为 0
+    if (userId === null || userId === undefined) {
       console.error("=== 用户信息调试 ===");
       console.error("currentUser:", currentUser);
       console.error("currentUser?.id:", currentUser?.id);
