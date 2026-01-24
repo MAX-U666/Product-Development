@@ -1,15 +1,9 @@
 // File: src/ProductFormAI.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { X, Loader, CheckCircle, AlertCircle, Settings } from "lucide-react";
+import { X, Loader, CheckCircle, AlertCircle, Settings, Save } from "lucide-react";
 import AIConfigModal from "./AIConfigModal";
-import { extractCompetitorInfo, generateProductPlan, insertData } from "./api";
+import { extractCompetitorInfo, generateProductPlan, insertAIDraft } from "./api";
 import { getCurrentBeijingISO } from "./timeConfig";
-
-/**
- * ProductFormAI
- * -------------
- * ✅ 目标：保留 3 个竞品输入框，但只要成功提取 >= 1 个竞品即可生成方案
- */
 
 const STORAGE_KEY = "ai_config";
 
@@ -24,7 +18,6 @@ const PROVIDER_META = {
   qwen: { label: "Qwen(千问)" },
   volcengine: { label: "VolcEngine(火山)" },
   deepseek: { label: "DeepSeek" },
-  // 如果你后端用的是 ark，这里也可以加上：
   ark: { label: "Ark(火山)" },
 };
 
@@ -151,10 +144,10 @@ const FieldRow = ({
 
 function makeEmptyCompetitor() {
   return {
-    mode: "url", // 'url' | 'image'
+    mode: "url",
     url: "",
-    images: [], // File[]
-    imagePreviews: [], // string[]
+    images: [],
+    imagePreviews: [],
     hint: "",
     loading: false,
     success: false,
@@ -165,34 +158,31 @@ function makeEmptyCompetitor() {
 }
 
 export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
-  // AI Config
   const [showAIConfig, setShowAIConfig] = useState(false);
   const [aiConfig, setAIConfig] = useState(readAIConfig());
 
-  // Steps State
   const [category, setCategory] = useState("");
   const [targetMarket, setTargetMarket] = useState("");
   const [targetPlatform, setTargetPlatform] = useState("");
 
-  // ✅ 保留 3 个竞品输入框
   const [competitors, setCompetitors] = useState([
     makeEmptyCompetitor(),
     makeEmptyCompetitor(),
     makeEmptyCompetitor(),
   ]);
 
-  // Plan generation
   const [planLoading, setPlanLoading] = useState(false);
   const [planResult, setPlanResult] = useState(null);
   const [planProviderUsed, setPlanProviderUsed] = useState("");
 
-  // Manual review/edit form
+  // ✅ 新增：保存草稿状态
+  const [savingDraft, setSavingDraft] = useState(false);
+
   const [formData, setFormData] = useState({
     developMonth: new Date().toISOString().slice(0, 7),
     category: "",
     market: "",
     platform: "",
-
     positioning: "",
     sellingPoint: "",
     ingredients: "",
@@ -206,10 +196,8 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     packaging: "",
   });
 
-  // AI explanations per field (note/confidence/reason)
   const [aiExplain, setAIExplain] = useState({});
 
-  // Step completion checks
   const step1Done = useMemo(() => !!category && !!targetMarket && !!targetPlatform, [
     category,
     targetMarket,
@@ -217,12 +205,9 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   ]);
 
   const extractedCount = useMemo(() => competitors.filter((c) => c.success).length, [competitors]);
-
-  // ✅ 关键：只要 >=1 个竞品提取成功，就算 Step2 Done
   const step2Done = useMemo(() => step1Done && extractedCount >= 1, [step1Done, extractedCount]);
   const step3Done = useMemo(() => step2Done && !!planResult, [step2Done, planResult]);
 
-  // Keep formData in sync for base fields
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
@@ -232,16 +217,12 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     }));
   }, [category, targetMarket, targetPlatform]);
 
-  // 清理 objectURL（防止关闭弹窗泄漏）
   useEffect(() => {
     return () => {
       try {
         competitors.forEach((c) => (c.imagePreviews || []).forEach((u) => URL.revokeObjectURL(u)));
-      } catch {
-        // ignore
-      }
+      } catch {}
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentAIComboText = useMemo(() => {
@@ -370,7 +351,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     }
   };
 
-  // ✅ 关键：生成方案只要求 >=1 个竞品成功
   const canGeneratePlan = useMemo(() => {
     if (!step1Done) return false;
     if (extractedCount < 1) return false;
@@ -378,7 +358,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     return true;
   }, [step1Done, extractedCount, planLoading]);
 
-  // ✅ 关键：payload 传扁平字段（对齐后端 generate-plan.js 常见读取方式）
   const handleGeneratePlan = async () => {
     if (!canGeneratePlan) return;
 
@@ -507,56 +486,80 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     }
   };
 
-  const handleSubmit = async () => {
+  // ✅ 新增：保存草稿函数
+  const handleSaveDraft = async () => {
     if (!currentUser?.id) {
       alert("当前用户信息缺失，请重新登录");
       return;
     }
 
-    if (!formData.category || !formData.market || !formData.platform) {
-      alert("请先完成：类目/市场/平台");
-      return;
-    }
     if (!formData.title) {
-      alert("请填写产品标题（可先用 AI 方案生成再微调）");
+      alert("请至少填写产品标题后再保存草稿");
       return;
     }
 
+    setSavingDraft(true);
     try {
-      await withTimeout(
-        insertData("products", {
-          develop_month: formData.developMonth,
-          category: formData.category,
-          market: formData.market,
-          platform: formData.platform,
+      // ✅ 估算成本
+      let estimatedCost = 0;
+      competitors.forEach(c => {
+        if (c.success) {
+          estimatedCost += c.mode === 'image' ? 0.002 : 0.0005;
+        }
+      });
+      if (planResult) {
+        if (aiConfig.generate_provider === 'claude') estimatedCost += 0.015;
+        else if (aiConfig.generate_provider === 'gpt4') estimatedCost += 0.02;
+        else estimatedCost += 0.001;
+      }
 
-          positioning: formData.positioning,
-          selling_point: formData.sellingPoint,
-          ingredients: formData.ingredients,
-          efficacy: formData.efficacy,
-          volume: formData.volume,
-          scent: formData.scent,
-          texture_color: formData.color,
-          pricing: formData.pricing,
-          title: formData.title,
-          keywords: formData.keywords,
-          packaging_requirements: formData.packaging,
+      // ✅ 对齐后端表结构：平铺字段
+      await insertAIDraft({
+        develop_month: formData.developMonth,
+        category: formData.category,
+        market: formData.market,
+        platform: formData.platform,
+        
+        positioning: formData.positioning || null,
+        selling_point: formData.sellingPoint || null,
+        ingredients: formData.ingredients || null,
+        efficacy: formData.efficacy || null,
+        volume: formData.volume || null,
+        scent: formData.scent || null,
+        texture_color: formData.color || null,
+        pricing: formData.pricing || null,
+        title: formData.title || null,
+        keywords: formData.keywords || null,
+        packaging_requirements: formData.packaging || null,
+        
+        extract_provider: aiConfig.extract_provider,
+        generate_provider: aiConfig.generate_provider,
+        competitors_data: competitors
+          .filter((c) => c.success && c.data)
+          .map((c) => ({
+            mode: c.mode,
+            url: c.url || "",
+            data: c.data || null,
+            providerUsed: c.providerUsed || "",
+          })),
+        ai_explanations: aiExplain,
+        estimated_cost: estimatedCost,
+        
+        status: '待审核',
+        created_by: currentUser.id,
+        created_at: getCurrentBeijingISO(),
+      });
 
-          developer_id: currentUser.id,
-          stage: 1,
-          status: "进行中",
-          created_at: getCurrentBeijingISO(),
-        }),
-        60000
-      );
-
+      alert('✅ AI 草稿已保存！\n\n请前往「🤖 AI 草稿」Tab 进行审核');
       onSuccess?.();
+      onClose?.();
     } catch (e) {
-      const msg =
-        String(e?.message || e) === "NETWORK_TIMEOUT"
-          ? "网络超时：创建产品失败，请稍后重试"
-          : "创建产品失败：请检查网络或稍后重试";
+      const msg = String(e?.message || e) === "NETWORK_TIMEOUT"
+        ? "网络超时：保存草稿失败，请稍后重试"
+        : `保存草稿失败：${String(e?.message || "").slice(0, 200) || "请稍后重试"}`;
       alert(msg);
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -654,7 +657,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           <div className="min-w-0">
             <div className="truncate text-base font-semibold text-zinc-900">AI 辅助创建产品</div>
             <div className="mt-1 text-xs text-zinc-500">
-              Step-by-step：先定类目/市场/平台 → 提取至少 1 个竞品（最多 3 个）→ 生成方案 → 人工审核 → 创建产品
+              Step-by-step：先定类目/市场/平台 → 提取至少 1 个竞品（最多 3 个）→ 生成方案 → 保存草稿
             </div>
           </div>
 
@@ -847,7 +850,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
 
                         <input
                           className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-                          placeholder="可选提示：例如“这是商品详情页/成分表/评价页”"
+                          placeholder="可选提示：例如"这是商品详情页/成分表/评价页""
                           value={c.hint || ""}
                           onChange={(e) => {
                             updateCompetitor(idx, { hint: e.target.value });
@@ -941,7 +944,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                 step={3}
                 title="AI 生成产品方案"
                 done={step3Done}
-                subtitle="生成后会自动填充到可编辑表单（Step 4）"
+                subtitle="生成后可直接保存草稿，等待管理员审核"
               />
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -970,193 +973,53 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                 </div>
               ) : null}
 
+              {/* ✅ 关键修改：生成成功后显示保存草稿按钮 */}
               {planResult ? (
                 <div className="mt-5 rounded-3xl border border-emerald-200 bg-gradient-to-r from-green-50 to-blue-50 p-5">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-base font-semibold text-zinc-900">AI 生成结果</div>
-                      <div className="mt-1 text-xs font-semibold text-emerald-700">
-                        ✅ 使用 {providerLabel(planProviderUsed || aiConfig.generate_provider)} 生成成功
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-base font-semibold text-zinc-900">✅ AI 生成成功</div>
+                        <div className="mt-1 text-xs font-semibold text-emerald-700">
+                          使用 {providerLabel(planProviderUsed || aiConfig.generate_provider)}
+                        </div>
+                      </div>
+
+                      {/* ✅ 保存草稿按钮 */}
+                      <button
+                        type="button"
+                        onClick={handleSaveDraft}
+                        disabled={savingDraft}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {savingDraft ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {savingDraft ? '保存中...' : '保存草稿'}
+                      </button>
+                    </div>
+
+                    {/* 简要预览 */}
+                    <div className="grid gap-2 text-sm">
+                      <div className="rounded-xl bg-white/70 px-3 py-2">
+                        <span className="font-semibold">标题：</span>
+                        {formData.title || '—'}
+                      </div>
+                      <div className="rounded-xl bg-white/70 px-3 py-2">
+                        <span className="font-semibold">定位：</span>
+                        {formData.positioning || '—'}
+                      </div>
+                      <div className="rounded-xl bg-white/70 px-3 py-2">
+                        <span className="font-semibold">卖点：</span>
+                        {formData.sellingPoint?.slice(0, 100) || '—'}
+                        {formData.sellingPoint?.length > 100 ? '...' : ''}
                       </div>
                     </div>
-                    <div className="text-xs text-zinc-600">提示：下方 Step 4 可逐字段编辑</div>
+
+                    <div className="text-xs text-zinc-600 bg-white/70 rounded-xl px-3 py-2">
+                      💡 提示：保存后草稿会进入「🤖 AI 草稿」Tab，状态为"待审核"，管理员审核通过后将自动创建正式产品
+                    </div>
                   </div>
                 </div>
               ) : null}
-            </div>
-          ) : null}
-
-          {/* Step 4 */}
-          {step3Done ? (
-            <div className="mt-5 rounded-3xl border border-zinc-200 bg-white p-5">
-              <StepHeader
-                step={4}
-                title="人工审核编辑"
-                done={false}
-                subtitle="逐字段确认与修改（保留 AI 说明 / 置信度 / 理由）"
-              />
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-sm font-semibold text-zinc-900">基础信息（自动带入）</div>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm">
-                      <div className="text-xs text-zinc-500">开发月份</div>
-                      <div className="font-semibold text-zinc-900">{formData.developMonth}</div>
-                    </div>
-                    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm">
-                      <div className="text-xs text-zinc-500">类目</div>
-                      <div className="font-semibold text-zinc-900">{formData.category}</div>
-                    </div>
-                    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm">
-                      <div className="text-xs text-zinc-500">市场</div>
-                      <div className="font-semibold text-zinc-900">{formData.market}</div>
-                    </div>
-                    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm">
-                      <div className="text-xs text-zinc-500">平台</div>
-                      <div className="font-semibold text-zinc-900">{formData.platform}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-sm font-semibold text-zinc-900">创建人</div>
-                  <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm">
-                    <div className="text-xs text-zinc-500">developer_id</div>
-                    <div className="font-semibold text-zinc-900">{currentUser?.id || "—"}</div>
-                  </div>
-                  <div className="mt-3 text-xs text-zinc-500">创建后：stage=1，status=进行中，created_at=北京时间 ISO</div>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <FieldRow
-                  label="产品定位"
-                  value={formData.positioning}
-                  onChange={(v) => setFormData((p) => ({ ...p, positioning: v }))}
-                  placeholder="例如：高保湿修护、敏感肌可用、日常沐浴护理..."
-                  aiNote={aiExplain?.positioning?.note}
-                  aiConfidence={aiExplain?.positioning?.confidence}
-                  aiReason={aiExplain?.positioning?.reason}
-                />
-
-                <FieldRow
-                  label="核心卖点"
-                  multiline
-                  value={formData.sellingPoint}
-                  onChange={(v) => setFormData((p) => ({ ...p, sellingPoint: v }))}
-                  placeholder="用要点列出：功效+成分+体验+人群..."
-                  aiNote={aiExplain?.sellingPoint?.note}
-                  aiConfidence={aiExplain?.sellingPoint?.confidence}
-                  aiReason={aiExplain?.sellingPoint?.reason}
-                />
-
-                <FieldRow
-                  label="主要成分"
-                  value={formData.ingredients}
-                  onChange={(v) => setFormData((p) => ({ ...p, ingredients: v }))}
-                  placeholder="例如：Niacinamide, PDRN, Hyaluronic Acid..."
-                  aiNote={aiExplain?.ingredients?.note}
-                  aiConfidence={aiExplain?.ingredients?.confidence}
-                  aiReason={aiExplain?.ingredients?.reason}
-                />
-
-                <FieldRow
-                  label="主打功效"
-                  value={formData.efficacy}
-                  onChange={(v) => setFormData((p) => ({ ...p, efficacy: v }))}
-                  placeholder="例如：美白、保湿、修护、去屑..."
-                  aiNote={aiExplain?.efficacy?.note}
-                  aiConfidence={aiExplain?.efficacy?.confidence}
-                  aiReason={aiExplain?.efficacy?.reason}
-                />
-
-                <FieldRow
-                  label="容量"
-                  value={formData.volume}
-                  onChange={(v) => setFormData((p) => ({ ...p, volume: v }))}
-                  placeholder="例如：400ml / 500ml"
-                  aiNote={aiExplain?.volume?.note}
-                  aiConfidence={aiExplain?.volume?.confidence}
-                  aiReason={aiExplain?.volume?.reason}
-                />
-
-                <FieldRow
-                  label="香味"
-                  value={formData.scent}
-                  onChange={(v) => setFormData((p) => ({ ...p, scent: v }))}
-                  placeholder="例如：花香/果香/木质香..."
-                  aiNote={aiExplain?.scent?.note}
-                  aiConfidence={aiExplain?.scent?.confidence}
-                  aiReason={aiExplain?.scent?.reason}
-                />
-
-                <FieldRow
-                  label="料体颜色"
-                  value={formData.color}
-                  onChange={(v) => setFormData((p) => ({ ...p, color: v }))}
-                  placeholder="例如：乳白/透明/淡粉..."
-                  aiNote={aiExplain?.color?.note}
-                  aiConfidence={aiExplain?.color?.confidence}
-                  aiReason={aiExplain?.color?.reason}
-                />
-
-                <FieldRow
-                  label="定价"
-                  value={formData.pricing}
-                  onChange={(v) => setFormData((p) => ({ ...p, pricing: v }))}
-                  placeholder="例如：IDR 49,900 / 59,900"
-                  aiNote={aiExplain?.pricing?.note}
-                  aiConfidence={aiExplain?.pricing?.confidence}
-                  aiReason={aiExplain?.pricing?.reason}
-                />
-
-                <FieldRow
-                  label="产品标题"
-                  multiline
-                  value={formData.title}
-                  onChange={(v) => setFormData((p) => ({ ...p, title: v }))}
-                  placeholder="建议：关键词堆叠 + 主要卖点 + 容量"
-                  aiNote={aiExplain?.title?.note}
-                  aiConfidence={aiExplain?.title?.confidence}
-                  aiReason={aiExplain?.title?.reason}
-                />
-
-                <FieldRow
-                  label="搜索关键词"
-                  multiline
-                  value={formData.keywords}
-                  onChange={(v) => setFormData((p) => ({ ...p, keywords: v }))}
-                  placeholder="用逗号分隔：keyword1, keyword2..."
-                  aiNote={aiExplain?.keywords?.note}
-                  aiConfidence={aiExplain?.keywords?.confidence}
-                  aiReason={aiExplain?.keywords?.reason}
-                />
-
-                <FieldRow
-                  label="包装设计需求"
-                  multiline
-                  value={formData.packaging}
-                  onChange={(v) => setFormData((p) => ({ ...p, packaging: v }))}
-                  placeholder="例如：主图风格、信息层级、元素、色调、字体..."
-                  aiNote={aiExplain?.packaging?.note}
-                  aiConfidence={aiExplain?.packaging?.confidence}
-                  aiReason={aiExplain?.packaging?.reason}
-                />
-              </div>
-
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-zinc-500">提示：如果后端未返回 explanations，你也可以先保存，后续再迭代。</div>
-
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  创建产品
-                </button>
-              </div>
             </div>
           ) : null}
         </div>
