@@ -125,12 +125,7 @@ export async function markTaskDone(taskId) {
 
 // ================= 通用查询 =================
 export async function fetchData(table, opts = {}) {
-  const {
-    select = '*',
-    orderBy,
-    limit,
-    filters,
-  } = opts || {}
+  const { select = '*', orderBy, limit, filters } = opts || {}
 
   const url = new URL(`${SB_URL}/rest/v1/${table}`)
   url.searchParams.set('select', select)
@@ -336,11 +331,6 @@ export async function createBottle(data) {
 // 这里统一走 Vercel Serverless Functions：/api/extract-competitor 与 /api/generate-plan
 
 /**
- * 提取竞品信息（走后端函数）
- * @param {string} url 竞品链接
- * @param {{ extract_provider?: 'gemini'|'claude'|'gpt4', generate_provider?: 'gemini'|'claude'|'gpt4' }} aiConfig
- */
-/**
  * input 支持两种形式：
  * 1) string: url
  * 2) object: { url?: string, images?: [{ data: base64, mime_type: string }] }
@@ -349,31 +339,30 @@ export async function extractCompetitorInfo(input, aiConfig = {}) {
   const payload =
     typeof input === "string"
       ? { url: input, ai_config: aiConfig }
-      : { ...input, ai_config: aiConfig };
+      : { ...input, ai_config: aiConfig }
 
   const res = await fetch("/api/extract-competitor", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  })
 
-  const text = await res.text().catch(() => "");
-  let json = null;
+  const text = await res.text().catch(() => "")
+  let json = null
   try {
-    json = text ? JSON.parse(text) : null;
+    json = text ? JSON.parse(text) : null
   } catch {}
 
   if (!res.ok) {
-    const msg = (json && (json.error || json.message)) || text || `HTTP_${res.status}`;
-    throw new Error(msg);
+    const msg = (json && (json.error || json.message)) || text || `HTTP_${res.status}`
+    throw new Error(msg)
   }
-  if (!json) throw new Error("AI 返回格式错误");
-  return json;
+  if (!json) throw new Error("AI 返回格式错误")
+  return json
 }
 
 /**
  * 生成产品方案（走后端函数）
- * @param {object} payload
  */
 export async function generateProductPlan(payload) {
   const res = await fetch('/api/generate-plan', {
@@ -386,9 +375,7 @@ export async function generateProductPlan(payload) {
   let json = null
   try {
     json = text ? JSON.parse(text) : null
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   if (!res.ok) {
     const msg = (json && (json.error || json.message)) || text || `HTTP_${res.status}`
@@ -399,160 +386,39 @@ export async function generateProductPlan(payload) {
   return json
 }
 
+// ================= AI 草稿（按你当前表结构：ai_drafts）=================
 
-
-// ================= AI 草稿 Drafts =================
-// 表名建议：ai_drafts
-// 字段建议（最小可用）：
-// id (uuid) | created_at (timestamptz) | created_by (text/uuid)
-// category | market | platform (text)
-// competitors (jsonb) | plan (jsonb)
-// status (text: 'draft'|'approved'|'rejected'|'needs_revision')
-// reviewed_by (text/uuid) | review_comment (text) | reviewed_at (timestamptz)
-
-// 1) 查询所有 AI 草稿（默认按 created_at 倒序）
+/**
+ * 查询所有 AI 草稿
+ * opts 可选：limit, status, createdBy
+ * 说明：你现在表结构 created_by 是 BIGINT
+ */
 export async function fetchAIDrafts(opts = {}) {
-  const {
-    limit = 50,
-    status,          // 可选过滤：draft/approved/rejected/needs_revision
-    createdBy,       // 可选过滤：某个用户
-  } = opts || {}
+  const { limit = 50, status, createdBy } = opts || {}
 
   const url = new URL(`${SB_URL}/rest/v1/ai_drafts`)
   url.searchParams.set('select', '*')
   url.searchParams.set('order', 'created_at.desc')
   if (typeof limit === 'number') url.searchParams.set('limit', String(limit))
-
   if (status) url.searchParams.set('status', `eq.${status}`)
-  if (createdBy) url.searchParams.set('created_by', `eq.${createdBy}`)
+  if (createdBy != null) url.searchParams.set('created_by', `eq.${createdBy}`)
 
   const res = await fetch(url.toString(), { headers: baseHeaders() })
-  if (!res.ok) throw new Error(await res.text())
-  const rows = await res.json()
-  return rows
-}
-
-// 2) 创建 AI 草稿
-// data 里建议传：
-// { created_by, category, market, platform, competitors, plan, status='draft', created_at? }
-export async function insertAIDraft(data) {
-  const res = await fetch(`${SB_URL}/rest/v1/ai_drafts`, {
-    method: 'POST',
-    headers: baseHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify([{
-      status: 'draft',
-      ...data,
-    }]),
-  })
-  if (!res.ok) throw new Error(await res.text())
-  const rows = await res.json()
-  return rows[0]
-}
-
-// 3) 更新草稿状态（审核）
-// action: 'approved' | 'rejected' | 'needs_revision'
-// reviewedBy: 谁审核的（currentUser.id）
-// comment: 审核备注
-export async function updateAIDraftStatus(id, action, reviewedBy = null, comment = '') {
-  if (!id) throw new Error('MISSING_DRAFT_ID')
-  if (!action) throw new Error('MISSING_ACTION')
-
-  const patch = {
-    status: action,
-    reviewed_by: reviewedBy,
-    review_comment: comment || '',
-    reviewed_at: new Date().toISOString(),
-  }
-
-  const res = await fetch(`${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`, {
-    method: 'PATCH',
-    headers: baseHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify(patch),
-  })
-  if (!res.ok) throw new Error(await res.text())
-  const rows = await res.json()
-  return rows[0]
-}
-
-
-// ================= AI Drafts（Supabase REST）=================
-
-export async function fetchAIDrafts() {
-  const url = `${SB_URL}/rest/v1/ai_drafts?order=created_at.desc`
-  const res = await fetch(url, { headers: baseHeaders() })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
-}
-
-export async function insertAIDraft(data) {
-  const url = `${SB_URL}/rest/v1/ai_drafts`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: baseHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify([data]),
-  })
-  if (!res.ok) throw new Error(await res.text())
-  const rows = await res.json()
-  return rows[0]
-}
-
-export async function updateAIDraftStatus(id, action, reviewedBy = null, comment = '') {
-  const url = `${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`
-  const patch = {
-    status: action, // approved / rejected / draft
-    reviewed_by: reviewedBy,
-    reviewed_at: new Date().toISOString(),
-    review_comment: comment || '',
-  }
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: baseHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify(patch),
-  })
-  if (!res.ok) throw new Error(await res.text())
-  const rows = await res.json()
-  return rows[0]
-}
-
-
-
-
-// ================= AI Drafts（按你当前表结构）=================
-
-/**
- * 查询所有 AI 草稿（管理员看全部；如果你未来开 RLS，可改成只看自己的）
- */
-export async function fetchAIDrafts() {
-  const url = `${SB_URL}/rest/v1/ai_drafts?order=created_at.desc`
-  const res = await fetch(url, { headers: baseHeaders() })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
 
 /**
  * 创建 AI 草稿
- * 字段对齐：
- * - competitors_data: JSONB
- * - ai_explanations: JSONB
- * - estimated_cost: DECIMAL(10,4)
- * - status: draft_status（默认 待审核）
- * - created_by: BIGINT NOT NULL
+ * 你表字段：
+ * competitors_data JSONB
+ * ai_explanations JSONB
+ * estimated_cost DECIMAL(10,4) DEFAULT 0
+ * status draft_status DEFAULT '待审核'
+ * created_by BIGINT NOT NULL
  */
 export async function insertAIDraft(data) {
-  const url = `${SB_URL}/rest/v1/ai_drafts`
-  const res = await fetch(url, {
+  const res = await fetch(`${SB_URL}/rest/v1/ai_drafts`, {
     method: 'POST',
     headers: baseHeaders({
       'Content-Type': 'application/json',
@@ -567,18 +433,19 @@ export async function insertAIDraft(data) {
 
 /**
  * 更新草稿状态（审核）
- * 你当前 status 是中文枚举：待审核 / 已通过 / 已驳回（按你实际 enum 为准）
+ * status：按你 enum 传中文，比如：'待审核' / '已通过' / '已驳回'
  */
 export async function updateAIDraftStatus(id, status, reviewedBy, comment = '') {
-  const url = `${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`
+  if (!id) throw new Error('MISSING_DRAFT_ID')
+
   const patch = {
     status,
-    reviewed_by: reviewedBy,
+    reviewed_by: reviewedBy ?? null,
     reviewed_at: new Date().toISOString(),
     review_comment: comment || '',
   }
 
-  const res = await fetch(url, {
+  const res = await fetch(`${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`, {
     method: 'PATCH',
     headers: baseHeaders({
       'Content-Type': 'application/json',
