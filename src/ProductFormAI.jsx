@@ -250,7 +250,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   ]);
 
   const extractedCount = useMemo(() => competitors.filter((c) => c.success).length, [competitors]);
-  const step2Done = useMemo(() => step1Done && extractedCount === 3, [step1Done, extractedCount]);
+  const step2Done = useMemo(() => step1Done && extractedCount >= 1, [step1Done, extractedCount]);
   const step3Done = useMemo(() => step2Done && !!planResult, [step2Done, planResult]);
 
   // Keep formData in sync for base fields
@@ -392,7 +392,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
 
   const canGeneratePlan = useMemo(() => {
     if (!step1Done) return false;
-    if (extractedCount !== 3) return false;
+    if (extractedCount < 1) return false;  // ✅ 改为：至少 1 个
     if (planLoading) return false;
     return true;
   }, [step1Done, extractedCount, planLoading]);
