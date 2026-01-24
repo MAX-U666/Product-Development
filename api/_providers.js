@@ -1,4 +1,4 @@
-// api/_providers.js
+
 / api/_providers.js
 
 function requireEnv(name) {
@@ -117,16 +117,6 @@ export async function callOpenAI(prompt) {
 }
 
 
-
-
-
-
-
-function requireEnv(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`MISSING_ENV:${name}`);
-  return v;
-}
 
 // DeepSeek API（OpenAI 兼容格式）
 export async function callDeepSeek(prompt) {
