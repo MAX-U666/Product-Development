@@ -1,8 +1,8 @@
 // File: src/ProductFormAI.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { X, Loader, CheckCircle, AlertCircle, Settings } from "lucide-react";
+import { X, Loader, CheckCircle, AlertCircle, Settings, Save } from "lucide-react";
 import AIConfigModal from "./AIConfigModal";
-import { extractCompetitorInfo, generateProductPlan, insertData } from "./api";
+import { extractCompetitorInfo, generateProductPlan, insertData, insertAIDraft } from "./api";
 import { getCurrentBeijingISO } from "./timeConfig";
 
 /**
@@ -214,7 +214,10 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   // Plan generation
   const [planLoading, setPlanLoading] = useState(false);
   const [planResult, setPlanResult] = useState(null);
-  const [planProviderUsed, setPlanProviderUsed] = useState("");
+  const [planProviderUsed, setPlanProviderUsed] = useState("")
+
+  // ✅ 新增：保存草稿状态
+  const [savingDraft, setSavingDraft] = useState(false);
 
   // Manual review/edit form
   const [formData, setFormData] = useState({
@@ -347,7 +350,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             type: f.type || "image/png",
             dataUrl: dataUrls[i],
           })),
-          hint: (item.hint || "").trim(), // 可选：你可让用户写“这是商品详情页/成分表/评价页”
+          hint: (item.hint || "").trim(), // 可选：你可让用户写'这是商品详情页/成分表/评价页'
         };
       }
 
@@ -501,6 +504,95 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           : "生成失败：请稍后重试";
       alert(msg);
       setPlanLoading(false);
+    }
+  };
+
+  // ✅ 新增：保存草稿函数
+  const handleSaveDraft = async () => {
+    // ✅ 兼容多种用户对象结构
+    const userId = currentUser?.id || currentUser?.user_id || currentUser?.userId;
+    
+    if (!userId) {
+      console.error("=== 用户信息调试 ===");
+      console.error("currentUser:", currentUser);
+      console.error("currentUser?.id:", currentUser?.id);
+      console.error("localStorage currentUser:", localStorage.getItem('currentUser'));
+      
+      alert("当前用户信息缺失，请重新登录\n\n详细信息请查看浏览器控制台");
+      return;
+    }
+
+    if (!formData.title) {
+      alert("请至少填写产品标题后再保存草稿");
+      return;
+    }
+
+    console.log("=== 准备保存草稿 ===");
+    console.log("用户ID:", userId);
+    console.log("标题:", formData.title);
+
+    setSavingDraft(true);
+    try {
+      // ✅ 估算成本
+      let estimatedCost = 0;
+      competitors.forEach(c => {
+        if (c.success) {
+          estimatedCost += c.mode === 'image' ? 0.002 : 0.0005;
+        }
+      });
+      if (planResult) {
+        if (aiConfig.generate_provider === 'claude') estimatedCost += 0.015;
+        else if (aiConfig.generate_provider === 'gpt4') estimatedCost += 0.02;
+        else estimatedCost += 0.001;
+      }
+
+      // ✅ 保存到 ai_drafts 表（扁平字段）
+      await insertAIDraft({
+        develop_month: formData.developMonth,
+        category: formData.category,
+        market: formData.market,
+        platform: formData.platform,
+        
+        positioning: formData.positioning || null,
+        selling_point: formData.sellingPoint || null,
+        ingredients: formData.ingredients || null,
+        efficacy: formData.efficacy || null,
+        volume: formData.volume || null,
+        scent: formData.scent || null,
+        texture_color: formData.color || null,
+        pricing: formData.pricing || null,
+        title: formData.title || null,
+        keywords: formData.keywords || null,
+        packaging_requirements: formData.packaging || null,
+        
+        extract_provider: aiConfig.extract_provider,
+        generate_provider: aiConfig.generate_provider,
+        competitors_data: competitors
+          .filter((c) => c.success && c.data)
+          .map((c) => ({
+            mode: c.mode,
+            url: c.url || "",
+            data: c.data || null,
+            providerUsed: c.providerUsed || "",
+          })),
+        ai_explanations: aiExplain,
+        estimated_cost: estimatedCost,
+        
+        status: '待审核',
+        created_by: userId,
+        created_at: getCurrentBeijingISO(),
+      });
+
+      alert('✅ AI 草稿已保存！\n\n请前往「🤖 AI 草稿」Tab 进行审核');
+      onSuccess?.();
+      onClose?.();
+    } catch (e) {
+      const msg = String(e?.message || e) === "NETWORK_TIMEOUT"
+        ? "网络超时：保存草稿失败，请稍后重试"
+        : `保存草稿失败：${String(e?.message || "").slice(0, 200) || "请稍后重试"}`;
+      alert(msg);
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -851,7 +943,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
 
                         <input
                           className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-                          placeholder="可选提示：例如“这是商品详情页/成分表/评价页”"
+                          placeholder="可选提示：例如'这是商品详情页/成分表/评价页'"
                           value={c.hint || ""}
                           onChange={(e) => {
                             updateCompetitor(idx, { hint: e.target.value });
@@ -1200,15 +1292,18 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
               </div>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-zinc-500">提示：如果后端未返回 explanations，你也可以先保存，后续再迭代提示词与结构。</div>
+                <div className="text-xs text-zinc-500">
+                  💡 提示：保存后草稿会进入「AI 草稿」Tab，状态为"待审核"，管理员审核通过后将自动创建正式产品
+                </div>
 
                 <button
                   type="button"
-                  onClick={handleSubmit}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
+                  onClick={handleSaveDraft}
+                  disabled={savingDraft}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
                 >
-                  <CheckCircle className="h-4 w-4" />
-                  创建产品
+                  <Save className="h-4 w-4" />
+                  {savingDraft ? '保存中...' : '保存草稿'}
                 </button>
               </div>
             </div>
