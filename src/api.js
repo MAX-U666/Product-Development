@@ -526,3 +526,68 @@ export async function updateAIDraftStatus(id, action, reviewedBy = null, comment
   return rows[0]
 }
 
+
+
+
+// ================= AI Drafts（按你当前表结构）=================
+
+/**
+ * 查询所有 AI 草稿（管理员看全部；如果你未来开 RLS，可改成只看自己的）
+ */
+export async function fetchAIDrafts() {
+  const url = `${SB_URL}/rest/v1/ai_drafts?order=created_at.desc`
+  const res = await fetch(url, { headers: baseHeaders() })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+/**
+ * 创建 AI 草稿
+ * 字段对齐：
+ * - competitors_data: JSONB
+ * - ai_explanations: JSONB
+ * - estimated_cost: DECIMAL(10,4)
+ * - status: draft_status（默认 待审核）
+ * - created_by: BIGINT NOT NULL
+ */
+export async function insertAIDraft(data) {
+  const url = `${SB_URL}/rest/v1/ai_drafts`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: baseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify([data]),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows[0]
+}
+
+/**
+ * 更新草稿状态（审核）
+ * 你当前 status 是中文枚举：待审核 / 已通过 / 已驳回（按你实际 enum 为准）
+ */
+export async function updateAIDraftStatus(id, status, reviewedBy, comment = '') {
+  const url = `${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`
+  const patch = {
+    status,
+    reviewed_by: reviewedBy,
+    reviewed_at: new Date().toISOString(),
+    review_comment: comment || '',
+  }
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: baseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify(patch),
+  })
+
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows[0]
+}
