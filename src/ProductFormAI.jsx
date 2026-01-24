@@ -8,20 +8,7 @@ import { getCurrentBeijingISO } from "./timeConfig";
 /**
  * ProductFormAI
  * -------------
- * 一个全新的 AI 辅助创建产品表单（分步垂直堆叠）
- *
- * ✅ 本版升级点：
- * 1) Provider 扩展：Gemini / Claude / GPT-4 + Qwen(千问) / VolcEngine(火山) / DeepSeek
- * 2) 竞品提取支持两种方式：
- *    - 方式A：粘贴链接 → AI 提取
- *    - 方式B：上传截图（最多3张）→ AI 识图提取
- *
- * 重要说明（给后端对齐）：
- * - 这里仍然调用同一个 API：extractCompetitorInfo(input, aiConfig)
- * - input 可能是：
- *   - string URL
- *   - { mode:'image', images:[{name,type,dataUrl}], hint?:string }
- * 后端只需要根据 input 类型分支处理即可。
+ * ✅ 目标：保留 3 个竞品输入框，但只要成功提取 >= 1 个竞品即可生成方案
  */
 
 const STORAGE_KEY = "ai_config";
@@ -37,6 +24,8 @@ const PROVIDER_META = {
   qwen: { label: "Qwen(千问)" },
   volcengine: { label: "VolcEngine(火山)" },
   deepseek: { label: "DeepSeek" },
+  // 如果你后端用的是 ark，这里也可以加上：
+  ark: { label: "Ark(火山)" },
 };
 
 const providerLabel = (p) => PROVIDER_META?.[p]?.label || String(p || "Unknown");
@@ -47,7 +36,6 @@ const readAIConfig = () => {
     if (!raw) return { extract_provider: "gemini", generate_provider: "claude" };
     const parsed = JSON.parse(raw);
 
-    // 兼容 AIConfigModal 的字段
     const extract_provider =
       parsed.extract_provider ||
       parsed.extractProvider ||
@@ -161,6 +149,21 @@ const FieldRow = ({
   );
 };
 
+function makeEmptyCompetitor() {
+  return {
+    mode: "url", // 'url' | 'image'
+    url: "",
+    images: [], // File[]
+    imagePreviews: [], // string[]
+    hint: "",
+    loading: false,
+    success: false,
+    error: "",
+    data: null,
+    providerUsed: "",
+  };
+}
+
 export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   // AI Config
   const [showAIConfig, setShowAIConfig] = useState(false);
@@ -171,44 +174,11 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   const [targetMarket, setTargetMarket] = useState("");
   const [targetPlatform, setTargetPlatform] = useState("");
 
-  // 3 competitors
+  // ✅ 保留 3 个竞品输入框
   const [competitors, setCompetitors] = useState([
-    {
-      mode: "url", // 'url' | 'image'
-      url: "",
-      images: [], // File[]
-      imagePreviews: [], // string[]
-      hint: "",
-      loading: false,
-      success: false,
-      error: "",
-      data: null,
-      providerUsed: "",
-    },
-    {
-      mode: "url",
-      url: "",
-      images: [],
-      imagePreviews: [],
-      hint: "",
-      loading: false,
-      success: false,
-      error: "",
-      data: null,
-      providerUsed: "",
-    },
-    {
-      mode: "url",
-      url: "",
-      images: [],
-      imagePreviews: [],
-      hint: "",
-      loading: false,
-      success: false,
-      error: "",
-      data: null,
-      providerUsed: "",
-    },
+    makeEmptyCompetitor(),
+    makeEmptyCompetitor(),
+    makeEmptyCompetitor(),
   ]);
 
   // Plan generation
@@ -247,7 +217,9 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   ]);
 
   const extractedCount = useMemo(() => competitors.filter((c) => c.success).length, [competitors]);
-  const step2Done = useMemo(() => step1Done && extractedCount === 3, [step1Done, extractedCount]);
+
+  // ✅ 关键：只要 >=1 个竞品提取成功，就算 Step2 Done
+  const step2Done = useMemo(() => step1Done && extractedCount >= 1, [step1Done, extractedCount]);
   const step3Done = useMemo(() => step2Done && !!planResult, [step2Done, planResult]);
 
   // Keep formData in sync for base fields
@@ -259,6 +231,18 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       platform: targetPlatform || prev.platform,
     }));
   }, [category, targetMarket, targetPlatform]);
+
+  // 清理 objectURL（防止关闭弹窗泄漏）
+  useEffect(() => {
+    return () => {
+      try {
+        competitors.forEach((c) => (c.imagePreviews || []).forEach((u) => URL.revokeObjectURL(u)));
+      } catch {
+        // ignore
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentAIComboText = useMemo(() => {
     return `${providerLabel(aiConfig.extract_provider)} / ${providerLabel(aiConfig.generate_provider)}`;
@@ -273,33 +257,36 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   };
 
   const setCompetitorMode = (idx, mode) => {
-    updateCompetitor(idx, {
-      mode,
-      url: mode === "url" ? competitors[idx]?.url || "" : "",
-      images: mode === "image" ? competitors[idx]?.images || [] : [],
-      imagePreviews: mode === "image" ? competitors[idx]?.imagePreviews || [] : [],
-      hint: competitors[idx]?.hint || "",
-      loading: false,
-      success: false,
-      error: "",
-      data: null,
-      providerUsed: "",
-    });
+    setCompetitors((prev) =>
+      prev.map((c, i) => {
+        if (i !== idx) return c;
+        return {
+          ...c,
+          mode,
+          url: mode === "url" ? c.url || "" : "",
+          images: mode === "image" ? c.images || [] : [],
+          imagePreviews: mode === "image" ? c.imagePreviews || [] : [],
+          hint: c.hint || "",
+          loading: false,
+          success: false,
+          error: "",
+          data: null,
+          providerUsed: "",
+        };
+      })
+    );
   };
 
   const handlePickImages = async (idx, filesLike) => {
     const files = Array.from(filesLike || []).filter((f) => f && String(f.type || "").startsWith("image/"));
     if (files.length === 0) return;
 
-    const sliced = files.slice(0, 3); // 每个竞品最多3张
+    const sliced = files.slice(0, 3);
     const previews = sliced.map((f) => URL.createObjectURL(f));
 
-    // 清理旧预览
     try {
       (competitors[idx]?.imagePreviews || []).forEach((u) => URL.revokeObjectURL(u));
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     updateCompetitor(idx, { images: sliced, imagePreviews: previews });
     resetCompetitorResult(idx);
@@ -308,9 +295,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   const clearImages = (idx) => {
     try {
       (competitors[idx]?.imagePreviews || []).forEach((u) => URL.revokeObjectURL(u));
-    } catch {
-      // ignore
-    }
+    } catch {}
     updateCompetitor(idx, { images: [], imagePreviews: [] });
     resetCompetitorResult(idx);
   };
@@ -318,7 +303,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   const handleExtractOne = async (idx) => {
     const item = competitors[idx];
 
-    // 校验输入
     if (item.mode === "url") {
       const url = (item.url || "").trim();
       if (!url) {
@@ -347,15 +331,14 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             type: f.type || "image/png",
             dataUrl: dataUrls[i],
           })),
-          hint: (item.hint || "").trim(), // 可选：你可让用户写“这是商品详情页/成分表/评价页”
+          hint: (item.hint || "").trim(),
         };
       }
 
-      // 统一调用：后端根据 input 类型分支处理
       const result = await withTimeout(extractCompetitorInfo(input, aiConfig), 90000);
 
       if (!result?.success) {
-        const msg = result?.message || "提取失败，请稍后重试";
+        const msg = result?.message || result?.error || "提取失败，请稍后重试";
         updateCompetitor(idx, { loading: false, success: false, error: msg });
         alert(msg);
         return;
@@ -381,29 +364,49 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       const msg =
         String(e?.message || e) === "NETWORK_TIMEOUT"
           ? "网络超时：请检查网络或稍后重试"
-          : "提取失败：请稍后重试";
+          : `提取失败：${String(e?.message || "").slice(0, 120) || "请稍后重试"}`;
       updateCompetitor(idx, { loading: false, success: false, error: msg });
       alert(msg);
     }
   };
 
+  // ✅ 关键：生成方案只要求 >=1 个竞品成功
   const canGeneratePlan = useMemo(() => {
     if (!step1Done) return false;
-    if (extractedCount !== 3) return false;
+    if (extractedCount < 1) return false;
     if (planLoading) return false;
     return true;
   }, [step1Done, extractedCount, planLoading]);
 
+  // ✅ 关键：payload 传扁平字段（对齐后端 generate-plan.js 常见读取方式）
   const handleGeneratePlan = async () => {
     if (!canGeneratePlan) return;
 
     const validCompetitors = competitors
       .filter((c) => c.success && c.data)
-      .map((c) => ({
-        input_mode: c.mode,
-        url: c.mode === "url" ? c.url : "",
-        extracted: c.data,
-      }));
+      .slice(0, 3)
+      .map((c) => {
+        const d = c.data || {};
+        return {
+          name: d?.name || d?.product_name || d?.productName || d?.listing?.title || "",
+          price: d?.price || d?.current_price || d?.currentPrice || d?.listing?.price?.current || "",
+          ingredients: d?.ingredients || d?.main_ingredients || d?.mainIngredients || d?.content?.keyIngredients || "",
+          benefits: Array.isArray(d?.benefits)
+            ? d.benefits
+            : Array.isArray(d?.claims)
+            ? d.claims
+            : Array.isArray(d?.positioning?.coreClaims)
+            ? d.positioning.coreClaims
+            : [],
+          source_url: d?.source_url || (c.mode === "url" ? (c.url || "") : ""),
+        };
+      })
+      .filter((x) => x.name || x.price || x.ingredients || (x.benefits || []).length);
+
+    if (validCompetitors.length < 1) {
+      alert("需要至少 1 个提取成功且有内容的竞品");
+      return;
+    }
 
     setPlanLoading(true);
     setPlanResult(null);
@@ -421,7 +424,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       const result = await withTimeout(generateProductPlan(payload), 120000);
 
       if (!result?.success) {
-        const msg = result?.message || "生成失败，请稍后重试";
+        const msg = result?.message || result?.error || "生成失败，请稍后重试";
         alert(msg);
         setPlanLoading(false);
         return;
@@ -438,7 +441,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       setPlanProviderUsed(providerUsed);
       setPlanResult(dataObj);
 
-      const draft = dataObj.plan || dataObj; // 兼容 plan 包裹
+      const draft = dataObj.plan || dataObj;
       const explanations = dataObj.explanations || dataObj.ai_explanations || {};
 
       setFormData((prev) => ({
@@ -498,7 +501,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       const msg =
         String(e?.message || e) === "NETWORK_TIMEOUT"
           ? "网络超时：生成时间较长，请稍后重试"
-          : "生成失败：请稍后重试";
+          : `生成失败：${String(e?.message || "").slice(0, 160) || "请稍后重试"}`;
       alert(msg);
       setPlanLoading(false);
     }
@@ -651,12 +654,11 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           <div className="min-w-0">
             <div className="truncate text-base font-semibold text-zinc-900">AI 辅助创建产品</div>
             <div className="mt-1 text-xs text-zinc-500">
-              Step-by-step：先定类目/市场/平台 → 提取 3 个竞品（链接或截图）→ 生成方案 → 人工审核 → 创建产品
+              Step-by-step：先定类目/市场/平台 → 提取至少 1 个竞品（最多 3 个）→ 生成方案 → 人工审核 → 创建产品
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* AI Config */}
             <button
               type="button"
               onClick={() => setShowAIConfig(true)}
@@ -670,7 +672,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
               </span>
             </button>
 
-            {/* Close */}
             <button
               type="button"
               onClick={onClose}
@@ -694,7 +695,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             />
 
             <div className="mt-5 grid gap-5 lg:grid-cols-3">
-              {/* Category */}
               <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                 <div className="text-sm font-semibold text-zinc-900">类目</div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -716,7 +716,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                 </div>
               </div>
 
-              {/* Market */}
               <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                 <div className="text-sm font-semibold text-zinc-900">市场</div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -738,7 +737,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                 </div>
               </div>
 
-              {/* Platform */}
               <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                 <div className="text-sm font-semibold text-zinc-900">平台</div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -778,9 +776,9 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             <div className="mt-5 rounded-3xl border border-zinc-200 bg-white p-5">
               <StepHeader
                 step={2}
-                title="竞品输入（支持链接 / 截图）"
+                title="竞品输入（至少 1 个，支持链接 / 截图）"
                 done={step2Done}
-                subtitle="每个竞品二选一：A 链接提取；B 上传截图（最多3张）识图提取"
+                subtitle="最多可提取 3 个竞品，但只需要提取成功 ≥ 1 个，就可以生成产品方案。"
               />
 
               <div className="mt-5 grid gap-4">
@@ -811,7 +809,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                       </div>
                     </div>
 
-                    {/* URL Mode */}
                     {c.mode === "url" ? (
                       <div className="mt-3">
                         <div className="text-xs text-zinc-500">方式A：粘贴链接（Shopee/Amazon/TikTok 等）</div>
@@ -826,7 +823,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                         />
                       </div>
                     ) : (
-                      /* Image Mode */
                       <div className="mt-3">
                         <div className="text-xs text-zinc-500">
                           方式B：上传截图（最多3张，建议：详情页/成分表/评价页）
@@ -873,7 +869,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                       </div>
                     )}
 
-                    {/* Actions */}
                     <div className="mt-4 flex items-center gap-2">
                       <button
                         type="button"
@@ -893,7 +888,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                       </div>
                     </div>
 
-                    {/* Status */}
                     <div className="mt-3">
                       {c.loading ? (
                         <div className="text-xs font-semibold text-zinc-600">
@@ -914,7 +908,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                       )}
                     </div>
 
-                    {/* Result card */}
                     {c.success && c.data ? (
                       <div className="mt-4">
                         <CompetitorCard item={c} />
@@ -925,17 +918,17 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
               </div>
 
               <div className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-                当前进度：已提取 <span className="font-bold">{extractedCount}</span> / 3
+                当前进度：已提取 <span className="font-bold">{extractedCount}</span> 个竞品（至少需要 1 个）
               </div>
 
               {step2Done ? (
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                  ✅ Step 2 完成：3 个竞品已提取
+                  ✅ Step 2 完成：已提取 {extractedCount} 个竞品
                 </div>
               ) : (
                 <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
                   <AlertCircle className="mr-2 inline h-4 w-4" />
-                  需要提取完 3 个竞品后才能生成方案
+                  需要至少提取 1 个竞品后才能生成方案（当前已提取 {extractedCount} 个）
                 </div>
               )}
             </div>
@@ -948,13 +941,12 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                 step={3}
                 title="AI 生成产品方案"
                 done={step3Done}
-                subtitle="生成后会出现渐变卡片，并自动填充到可编辑表单（Step 4）"
+                subtitle="生成后会自动填充到可编辑表单（Step 4）"
               />
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-zinc-700">
-                  使用：<span className="font-semibold">{providerLabel(aiConfig.generate_provider)}</span>{" "}
-                  生成方案（可在右上角 AI 配置切换）
+                  使用：<span className="font-semibold">{providerLabel(aiConfig.generate_provider)}</span> 生成方案
                 </div>
 
                 <button
@@ -987,53 +979,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                         ✅ 使用 {providerLabel(planProviderUsed || aiConfig.generate_provider)} 生成成功
                       </div>
                     </div>
-                    <div className="text-xs text-zinc-600">提示：下方 Step 4 可逐字段编辑，并保留 AI 置信度与理由</div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl bg-white/70 p-4">
-                      <div className="text-xs font-semibold text-zinc-600">自动填充字段预览</div>
-                      <div className="mt-2 space-y-2 text-sm text-zinc-900">
-                        <div>
-                          <span className="text-zinc-500">标题：</span>
-                          <span className="font-semibold">{formData.title || "—"}</span>
-                        </div>
-                        <div>
-                          <span className="text-zinc-500">定价：</span>
-                          <span className="font-semibold">{formData.pricing || "—"}</span>
-                        </div>
-                        <div>
-                          <span className="text-zinc-500">定位：</span>
-                          <span className="font-semibold">{formData.positioning || "—"}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-white/70 p-4">
-                      <div className="text-xs font-semibold text-zinc-600">AI 置信度（示例）</div>
-                      <div className="mt-2 space-y-2 text-sm text-zinc-900">
-                        {Object.keys(aiExplain || {}).length ? (
-                          Object.entries(aiExplain)
-                            .slice(0, 4)
-                            .map(([k, v]) => (
-                              <div key={k} className="flex items-center justify-between">
-                                <span className="text-zinc-600">{k}</span>
-                                {typeof v?.confidence === "number" ? (
-                                  <span className="rounded-full bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">
-                                    {Math.round(v.confidence * 100)}%
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-zinc-400">—</span>
-                                )}
-                              </div>
-                            ))
-                        ) : (
-                          <div className="text-xs text-zinc-500">
-                            未提供 explanations 字段也没关系，你仍可在 Step 4 手动编辑。
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <div className="text-xs text-zinc-600">提示：下方 Step 4 可逐字段编辑</div>
                   </div>
                 </div>
               ) : null}
@@ -1047,7 +993,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                 step={4}
                 title="人工审核编辑"
                 done={false}
-                subtitle="逐字段确认与修改（每个字段保留 AI 说明 / 置信度 / 理由）"
+                subtitle="逐字段确认与修改（保留 AI 说明 / 置信度 / 理由）"
               />
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -1200,7 +1146,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
               </div>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-zinc-500">提示：如果后端未返回 explanations，你也可以先保存，后续再迭代提示词与结构。</div>
+                <div className="text-xs text-zinc-500">提示：如果后端未返回 explanations，你也可以先保存，后续再迭代。</div>
 
                 <button
                   type="button"
@@ -1220,7 +1166,6 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           isOpen={showAIConfig}
           onClose={() => setShowAIConfig(false)}
           onSave={(cfg) => {
-            // AIConfigModal 返回：extractProvider / planProvider
             const mapped = {
               extract_provider: cfg.extractProvider || cfg.extract_provider || "gemini",
               generate_provider: cfg.planProvider || cfg.generate_provider || "claude",
@@ -1228,9 +1173,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             setAIConfig(mapped);
             try {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped));
-            } catch {
-              // ignore
-            }
+            } catch {}
           }}
         />
       </div>
