@@ -523,14 +523,9 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       return;
     }
 
-    if (!formData.title) {
-      alert("请至少填写产品标题后再保存草稿");
-      return;
-    }
-
     console.log("=== 准备保存草稿 ===");
     console.log("用户ID:", userId);
-    console.log("标题:", formData.title);
+    console.log("标题:", formData.title || "(未填写)");
 
     setSavingDraft(true);
     try {
@@ -1127,6 +1122,22 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* ✅ 新增：保存草稿按钮 */}
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-white/70 p-4">
+                    <div className="text-xs text-zinc-600">
+                      💡 <strong>可直接保存草稿</strong>，无需等待人工编辑。管理员审核通过后将自动创建正式产品。
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSaveDraft}
+                      disabled={savingDraft}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+                    >
+                      {savingDraft ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {savingDraft ? '保存中...' : '💾 保存草稿'}
+                    </button>
                   </div>
                 </div>
               ) : null}
