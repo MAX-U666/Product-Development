@@ -1,7 +1,7 @@
 // File: src/App.jsx
 import React, { useState, useEffect } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles } from 'lucide-react'
-import { fetchData, deleteData } from './api'
+import { fetchData, deleteData, fetchAIDrafts } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import ProductForm from './ProductForm'
@@ -20,9 +20,12 @@ export default function App() {
   const [showProductFormAI, setShowProductFormAI] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [loading, setLoading] = useState(true)
+  
+  // ✅ 新增：待审核草稿数量
+  const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
 
   useEffect(() => {
-    // ✅ 从 localStorage 恢复用户登录状态
+    // 从 localStorage 恢复用户登录状态
     const savedUser = localStorage.getItem('currentUser')
     if (savedUser) {
       try {
@@ -49,9 +52,15 @@ export default function App() {
   async function loadData() {
     setLoading(true)
     try {
-      const [usersData, productsData] = await Promise.all([fetchData('users'), fetchData('products')])
+      const [usersData, productsData] = await Promise.all([
+        fetchData('users'), 
+        fetchData('products')
+      ])
       setUsers(usersData || [])
       setProducts(productsData || [])
+      
+      // ✅ 新增：加载待审核草稿数量
+      await loadPendingDraftsCount()
     } catch (error) {
       console.error('加载失败:', error)
     } finally {
@@ -59,7 +68,17 @@ export default function App() {
     }
   }
 
-  // ✅ 优化登录逻辑：根据角色自动跳转初始 Tab
+  // ✅ 新增：加载待审核草稿数量
+  async function loadPendingDraftsCount() {
+    try {
+      const drafts = await fetchAIDrafts({ status: '待审核' })
+      setPendingDraftsCount(drafts?.length || 0)
+    } catch (error) {
+      console.error('加载草稿数量失败:', error)
+      setPendingDraftsCount(0)
+    }
+  }
+
   function handleLogin(user) {
     setCurrentUser(user)
     if (user.role === '设计师') {
@@ -74,7 +93,7 @@ export default function App() {
   function handleLogout() {
     setCurrentUser(null)
     setActiveTab('dashboard')
-    localStorage.removeItem('currentUser') // ✅ 清除缓存
+    localStorage.removeItem('currentUser')
   }
 
   async function handleDeleteProduct(product) {
@@ -98,6 +117,12 @@ export default function App() {
       console.error(e)
       alert('删除失败：请查看控制台错误')
     }
+  }
+
+  // ✅ 新增：AI 创建成功后刷新草稿数量
+  async function handleAICreateSuccess() {
+    await loadData()
+    await loadPendingDraftsCount()
   }
 
   if (loading) {
@@ -190,7 +215,6 @@ export default function App() {
             📦 全部产品
           </button>
 
-          {/* ✅ 权限修正：设计师和管理员均可查看设计任务 */}
           {(currentUser.role === '设计师' || currentUser.role === '管理员') && (
             <button
               onClick={() => setActiveTab('designer')}
@@ -204,7 +228,6 @@ export default function App() {
             </button>
           )}
 
-          {/* 内容人员/管理员 Tab */}
           {(currentUser.role === '内容人员' || currentUser.role === '管理员') && (
             <button
               onClick={() => setActiveTab('content')}
@@ -218,17 +241,23 @@ export default function App() {
             </button>
           )}
 
-          {/* 🤖 AI 草稿（管理员 / 开发人员） */}
+          {/* ✅ 修改：AI 草稿 Tab - 带待审核数量角标 */}
           {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
             <button
               onClick={() => setActiveTab('ai_drafts')}
-              className={`px-4 py-3 border-b-2 transition-colors ${
+              className={`px-4 py-3 border-b-2 transition-colors relative ${
                 activeTab === 'ai_drafts'
                   ? 'border-purple-600 text-purple-600 font-medium'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
               🤖 AI 草稿
+              {/* ✅ 待审核数量角标 */}
+              {pendingDraftsCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {pendingDraftsCount > 99 ? '99+' : pendingDraftsCount}
+                </span>
+              )}
             </button>
           )}
         </div>
@@ -284,7 +313,6 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {products.map(product => {
-                      // ✅ 优化负责人显示逻辑，适配所有阶段
                       let currentOwner = '-'
                       if (product.stage === 1) {
                         const dev = users.find(u => u.id === product.developer_id)
@@ -359,21 +387,20 @@ export default function App() {
           </div>
         )}
 
-        {/* ✅ 权限修正：设计师和管理员均可访问设计工作台 */}
         {activeTab === 'designer' && (currentUser.role === '设计师' || currentUser.role === '管理员') && (
           <DesignerDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
 
-        {/* 内容人员工作台 */}
         {activeTab === 'content' && (currentUser.role === '内容人员' || currentUser.role === '管理员') && (
           <ContentDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
 
-        {/* 🤖 AI 草稿 */}
+        {/* ✅ 修改：传递 onRefresh 回调 */}
         {activeTab === 'ai_drafts' && (currentUser.role === '管理员' || currentUser.role === '开发人员') && (
           <AIDraftDashboard
             currentUser={currentUser}
             onCreateProduct={() => setShowProductFormAI(true)}
+            onRefresh={loadPendingDraftsCount}
           />
         )}
       </div>
@@ -382,8 +409,13 @@ export default function App() {
         <ProductForm currentUser={currentUser} onClose={() => setShowProductForm(false)} onSuccess={loadData} />
       )}
 
+      {/* ✅ 修改：传递 handleAICreateSuccess 回调 */}
       {showProductFormAI && (
-        <ProductFormAI currentUser={currentUser} onClose={() => setShowProductFormAI(false)} onSuccess={loadData} />
+        <ProductFormAI 
+          currentUser={currentUser} 
+          onClose={() => setShowProductFormAI(false)} 
+          onSuccess={handleAICreateSuccess}
+        />
       )}
 
       {selectedProduct && (
