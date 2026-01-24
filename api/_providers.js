@@ -2,9 +2,9 @@
  * Provider adapters (server-side only)
  *
  * Notes:
- * - Gemini REST: https://ai.google.dev/api/generate-content citeturn0search1turn0search10
- * - Claude Messages API: https://api.anthropic.com/v1/messages citeturn0search0turn0search15
- * - OpenAI Responses API: /v1/responses citeturn0search5turn0search2
+ * - Gemini REST: https://ai.google.dev/api/generate-content
+ * - Claude Messages API: https://api.anthropic.com/v1/messages
+ * - OpenAI Responses API: /v1/responses
  */
 
 function requireEnv(name) {
@@ -13,6 +13,7 @@ function requireEnv(name) {
   return v;
 }
 
+// 调用 Gemini API
 export async function callGemini(prompt) {
   const key = requireEnv("GEMINI_API_KEY");
   const model = process.env.GEMINI_MODEL || "gemini-1.5-flash-001";
@@ -43,6 +44,7 @@ export async function callGemini(prompt) {
   return text.trim();
 }
 
+// 调用 Claude API
 export async function callClaude(prompt) {
   const key = requireEnv("ANTHROPIC_API_KEY");
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
@@ -76,8 +78,8 @@ export async function callClaude(prompt) {
   return text.trim();
 }
 
+// 提取 OpenAI 返回的文本
 function extractOpenAIText(resp) {
-  // Responses API: output -> content blocks
   const out = resp?.output || [];
   const texts = [];
   for (const item of out) {
@@ -89,6 +91,7 @@ function extractOpenAIText(resp) {
   return texts.join("").trim();
 }
 
+// 调用 OpenAI API
 export async function callOpenAI(prompt) {
   const key = requireEnv("OPENAI_API_KEY");
   const model = process.env.OPENAI_MODEL || "gpt-4.1";
@@ -118,4 +121,106 @@ export async function callOpenAI(prompt) {
   }
 
   return extractOpenAIText(json);
+}
+
+// 调用 DeepSeek API
+export async function callDeepSeek(prompt) {
+  const key = requireEnv("DEEPSEEK_API_KEY");
+  const url = 'https://api.deepseek.ai/v1/your-endpoint'; // 替换为 DeepSeek 的实际 API 地址
+
+  const body = {
+    model: process.env.DEEPSEEK_MODEL || "deepseek-model",  // 模型名，需根据需求替换
+    input: { prompt },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
+      throw new Error(`DEEPSEEK_ERROR:${msg}`);
+    }
+
+    const text = json?.response || "";
+    return text.trim();
+  } catch (error) {
+    console.error('Error calling DeepSeek API:', error);
+    throw error;
+  }
+}
+
+// 调用 Qwen（千问）API
+export async function callQwen(prompt) {
+  const key = requireEnv("DASHSCOPE_API_KEY");
+  const url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';  // 千问接口地址
+
+  const body = {
+    model: process.env.DASHSCOPE_MODEL || "qwen-max",  // 根据需求替换模型名
+    input: { prompt },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
+      throw new Error(`QWEN_ERROR:${msg}`);
+    }
+
+    const text = json?.response || "";
+    return text.trim();
+  } catch (error) {
+    console.error('Error calling Qwen API:', error);
+    throw error;
+  }
+}
+
+// 调用 Ark API
+export async function callArk(prompt) {
+  const key = requireEnv("ARK_API_KEY");
+  const url = 'https://api.ark.ai/v1/your-endpoint';  // 替换为 Ark 的实际 API 地址
+
+  const body = {
+    model: process.env.ARK_MODEL || "ark-model",  // 模型名，需根据需求替换
+    input: { prompt },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
+      throw new Error(`ARK_ERROR:${msg}`);
+    }
+
+    const text = json?.response || "";
+    return text.trim();
+  } catch (error) {
+    console.error('Error calling Ark API:', error);
+    throw error;
+  }
 }
