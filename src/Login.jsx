@@ -84,9 +84,13 @@ export default function Login({ onLogin }) {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">用户名</label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+              用户名
+            </label>
             <input
               type="text"
+              id="username"
+              name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -97,9 +101,13 @@ export default function Login({ onLogin }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">密码</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              密码
+            </label>
             <input
               type="password"
+              id="password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={handleKeyDown}
