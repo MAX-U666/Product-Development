@@ -458,3 +458,88 @@ export async function updateAIDraftStatus(id, status, reviewedBy, comment = '') 
   const rows = await res.json()
   return rows[0]
 }
+
+
+// ================= 补充到 src/api.js 末尾 =================
+
+/**
+ * ✅ 新增：从 AI 草稿创建正式产品
+ * @param {number} draftId - 草稿 ID
+ * @param {number} createdBy - 创建人 ID
+ */
+export async function createProductFromDraft(draftId, createdBy = null) {
+  try {
+    // 1. 获取草稿详情
+    const drafts = await fetchAIDrafts();
+    const draft = drafts.find(d => d.id === draftId);
+    
+    if (!draft) {
+      throw new Error('草稿不存在');
+    }
+
+    if (draft.status !== '已通过') {
+      throw new Error('只能从已通过的草稿创建产品');
+    }
+
+    // 2. 构建产品数据
+    const productData = {
+      // 基础信息
+      develop_month: draft.develop_month || new Date().toISOString().slice(0, 7),
+      category: draft.category || '',
+      target_market: draft.market || '',
+      target_platform: draft.platform || '',
+      
+      // AI 生成的字段
+      selling_point: draft.selling_point || draft.sellingPoint || '',
+      main_concept: draft.positioning || '',
+      ingredient: draft.ingredients || '',
+      primary_benefit: draft.efficacy || '',
+      ingredients: draft.ingredients || '',
+      
+      // 产品规格
+      capacity: draft.volume || '',
+      fragrance: draft.scent || '',
+      material_color: draft.texture_color || draft.color || '',
+      price: draft.pricing || '',
+      
+      // 包装需求
+      packaging_requirements: draft.packaging_requirements || draft.packaging || '',
+      
+      // 竞品数据（可选）
+      competitor_1_url: '',
+      competitor_2_url: '',
+      competitor_3_url: '',
+      competitor_1_img: '',
+      competitor_2_img: '',
+      competitor_3_img: '',
+      ref_design_img: '',
+      
+      // 瓶型（可选）
+      bottle_id: null,
+      
+      // 阶段状态
+      stage: 1,
+      status: '进行中',
+      developer_id: createdBy,
+      develop_start_time: new Date().toISOString(),
+      develop_submit_time: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      
+      // 包装设计字段
+      package_designer_id: null,
+      package_design_url: null,
+      package_design_time: null,
+      package_review_status: null,
+      package_review_note: null,
+      review_history: [],
+    };
+
+    // 3. 创建产品
+    const result = await insertData('products', productData);
+    
+    return result;
+  } catch (error) {
+    console.error('从草稿创建产品失败:', error);
+    throw error;
+  }
+}
