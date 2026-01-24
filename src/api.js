@@ -398,3 +398,85 @@ export async function generateProductPlan(payload) {
   if (!json) throw new Error('AI 返回格式错误')
   return json
 }
+
+
+
+// ================= AI 草稿 Drafts =================
+// 表名建议：ai_drafts
+// 字段建议（最小可用）：
+// id (uuid) | created_at (timestamptz) | created_by (text/uuid)
+// category | market | platform (text)
+// competitors (jsonb) | plan (jsonb)
+// status (text: 'draft'|'approved'|'rejected'|'needs_revision')
+// reviewed_by (text/uuid) | review_comment (text) | reviewed_at (timestamptz)
+
+// 1) 查询所有 AI 草稿（默认按 created_at 倒序）
+export async function fetchAIDrafts(opts = {}) {
+  const {
+    limit = 50,
+    status,          // 可选过滤：draft/approved/rejected/needs_revision
+    createdBy,       // 可选过滤：某个用户
+  } = opts || {}
+
+  const url = new URL(`${SB_URL}/rest/v1/ai_drafts`)
+  url.searchParams.set('select', '*')
+  url.searchParams.set('order', 'created_at.desc')
+  if (typeof limit === 'number') url.searchParams.set('limit', String(limit))
+
+  if (status) url.searchParams.set('status', `eq.${status}`)
+  if (createdBy) url.searchParams.set('created_by', `eq.${createdBy}`)
+
+  const res = await fetch(url.toString(), { headers: baseHeaders() })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows
+}
+
+// 2) 创建 AI 草稿
+// data 里建议传：
+// { created_by, category, market, platform, competitors, plan, status='draft', created_at? }
+export async function insertAIDraft(data) {
+  const res = await fetch(`${SB_URL}/rest/v1/ai_drafts`, {
+    method: 'POST',
+    headers: baseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify([{
+      status: 'draft',
+      ...data,
+    }]),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows[0]
+}
+
+// 3) 更新草稿状态（审核）
+// action: 'approved' | 'rejected' | 'needs_revision'
+// reviewedBy: 谁审核的（currentUser.id）
+// comment: 审核备注
+export async function updateAIDraftStatus(id, action, reviewedBy = null, comment = '') {
+  if (!id) throw new Error('MISSING_DRAFT_ID')
+  if (!action) throw new Error('MISSING_ACTION')
+
+  const patch = {
+    status: action,
+    reviewed_by: reviewedBy,
+    review_comment: comment || '',
+    reviewed_at: new Date().toISOString(),
+  }
+
+  const res = await fetch(`${SB_URL}/rest/v1/ai_drafts?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: baseHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows[0]
+}
+
