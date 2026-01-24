@@ -1,6 +1,6 @@
 // src/AIDraftDashboard.jsx
 import React, { useEffect, useState } from "react";
-import { fetchAIDrafts } from "./api";
+import { fetchAIDrafts } from "./api";  // 确保从 api.js 导入
 import DraftReviewModal from "./DraftReviewModal";
 
 function safeGet(obj, path, fallback = "") {
@@ -49,7 +49,7 @@ export default function AIDraftDashboard({ currentUser }) {
   const load = async () => {
     setLoading(true);
     try {
-      const rows = await fetchAIDrafts();
+      const rows = await fetchAIDrafts();  // 使用从 api.js 导入的函数
       setDrafts(rows || []);
     } catch (e) {
       alert(`加载 AI 草稿失败：${String(e?.message || e)}`);
