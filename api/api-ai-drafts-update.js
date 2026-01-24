@@ -1,34 +1,28 @@
 /**
  * /api/ai-drafts-update
  * 
- * POST 请求：更新草稿状态（审核通过/拒绝）
- * 
- * 入参：
- * {
- *   id: 123,
- *   action: "approve" | "reject",
- *   reviewed_by: 1,
- *   review_comment: "质量不佳，需要重新生成"  // 拒绝时必填
- * }
- * 
- * 出参：
- * {
- *   success: true
- * }
+ * POST 请求：更新草稿状态（审核通过/拒绝）（Supabase 版本）
  */
 
-import { query } from './_db.js';
-import { readJson, sendJson, requirePost } from './_utils.js';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 export default async function handler(req, res) {
   try {
-    if (!requirePost(req, res)) return;
+    // 只允许 POST 请求
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+    }
 
-    const body = await readJson(req);
+    const body = req.body;
 
     // 校验必填字段
     if (!body.id || !body.action || !body.reviewed_by) {
-      return sendJson(res, 400, { 
+      return res.status(400).json({ 
         error: 'MISSING_FIELD',
         required: ['id', 'action', 'reviewed_by']
       });
@@ -36,7 +30,7 @@ export default async function handler(req, res) {
 
     // 校验 action
     if (!['approve', 'reject'].includes(body.action)) {
-      return sendJson(res, 400, { 
+      return res.status(400).json({ 
         error: 'INVALID_ACTION',
         message: 'action must be "approve" or "reject"'
       });
@@ -44,41 +38,52 @@ export default async function handler(req, res) {
 
     // 如果是拒绝，必须提供原因
     if (body.action === 'reject' && !body.review_comment) {
-      return sendJson(res, 400, { 
+      return res.status(400).json({ 
         error: 'MISSING_REVIEW_COMMENT',
         message: 'review_comment is required when rejecting'
       });
     }
 
-    // 更新状态
+    // 准备更新数据
     const newStatus = body.action === 'approve' ? '已通过' : '已拒绝';
-    const reviewedAt = new Date().toISOString();
+    const updateData = {
+      status: newStatus,
+      reviewed_by: body.reviewed_by,
+      review_comment: body.review_comment || null,
+      reviewed_at: new Date().toISOString()
+    };
 
-    const sql = `
-      UPDATE ai_drafts
-      SET 
-        status = ?,
-        reviewed_by = ?,
-        review_comment = ?,
-        reviewed_at = ?
-      WHERE id = ?
-    `;
+    // 更新数据库
+    const { data, error } = await supabase
+      .from('ai_drafts')
+      .update(updateData)
+      .eq('id', body.id)
+      .select();
 
-    const params = [
-      newStatus,
-      body.reviewed_by,
-      body.review_comment || null,
-      reviewedAt,
-      body.id
-    ];
+    if (error) {
+      console.error('[api/ai-drafts-update] Supabase error:', error);
+      return res.status(500).json({ 
+        error: 'DATABASE_ERROR', 
+        message: error.message 
+      });
+    }
 
-    await query(sql, params);
+    // 检查是否更新成功
+    if (!data || data.length === 0) {
+      return res.status(404).json({ 
+        error: 'NOT_FOUND',
+        message: `Draft with id ${body.id} not found`
+      });
+    }
 
-    return sendJson(res, 200, { success: true });
+    return res.status(200).json({ 
+      success: true,
+      data: data[0]
+    });
 
   } catch (e) {
     console.error('[api/ai-drafts-update] Error:', e);
-    return sendJson(res, 500, { 
+    return res.status(500).json({ 
       error: 'INTERNAL_ERROR', 
       message: String(e?.message || e) 
     });
