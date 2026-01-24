@@ -850,7 +850,7 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
 
                         <input
                           className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-                          placeholder="可选提示：例如"这是商品详情页/成分表/评价页""
+                          placeholder="可选提示：例如'这是商品详情页/成分表/评价页'"
                           value={c.hint || ""}
                           onChange={(e) => {
                             updateCompetitor(idx, { hint: e.target.value });
