@@ -4,13 +4,13 @@
  * 入参:
  * {
  *   "url": "https://shopee.co.id/...",
- *   "ai_config": { "extract_provider": "gemini|claude|gpt4", "generate_provider": ... }
+ *   "ai_config": { "extract_provider": "gemini|claude|gpt4|deepseek|qwen|ark", "generate_provider": ... }
  * }
  *
  * 出参:
  * {
  *   success: boolean,
- *   provider: "gemini|claude|gpt4",
+ *   provider: "gemini|claude|gpt4|deepseek|qwen|ark",
  *   data: { name, price, ingredients, benefits, source_url }
  * }
  *
@@ -20,11 +20,22 @@
  */
 
 import { readJson, sendJson, requirePost, normalizeProvider } from "./_utils.js";
-import { callGemini, callClaude, callOpenAI } from "./_providers.js";
+import { 
+  callGemini, 
+  callClaude, 
+  callOpenAI, 
+  callDeepSeek, 
+  callQwen, 
+  callArk 
+} from "./_providers.js";
 
+// 根据 provider 选择合适的调用函数
 function pickCaller(provider) {
   if (provider === "claude") return callClaude;
   if (provider === "gpt4") return callOpenAI;
+  if (provider === "deepseek") return callDeepSeek;  // 新增
+  if (provider === "qwen") return callQwen;          // 新增
+  if (provider === "ark") return callArk;            // 新增
   return callGemini;
 }
 
