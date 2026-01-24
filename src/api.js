@@ -371,27 +371,6 @@ export async function extractCompetitorInfo(input, aiConfig = {}) {
   return json;
 }
 
-
-
-
-
-  const text = await res.text().catch(() => '')
-  let json = null
-  try {
-    json = text ? JSON.parse(text) : null
-  } catch {
-    // ignore
-  }
-
-  if (!res.ok) {
-    const msg = (json && (json.error || json.message)) || text || `HTTP_${res.status}`
-    throw new Error(msg)
-  }
-
-  if (!json) throw new Error('AI 返回格式错误')
-  return json
-}
-
 /**
  * 生成产品方案（走后端函数）
  * @param {object} payload
