@@ -207,15 +207,20 @@ export async function deleteData(table, id) {
   return response.ok
 }
 
+
+
 // ================= 图片上传通用方法 =================
 export async function uploadImage(bucket, file) {
   if (!file) return null
+
+  // ✅ 强制统一到真实存在的 bucket，彻底消灭 Bucket not found
+  const REAL_BUCKET = 'bottle-library'
 
   const ext = file.name.split('.').pop()
   const fileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`
   const path = `${fileName}`
 
-  const uploadRes = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
+  const uploadRes = await fetch(`${SB_URL}/storage/v1/object/${REAL_BUCKET}/${path}`, {
     method: 'POST',
     headers: {
       ...baseHeaders(),
@@ -227,11 +232,14 @@ export async function uploadImage(bucket, file) {
   if (!uploadRes.ok) {
     const text = await uploadRes.text().catch(() => '')
     console.error('uploadImage failed:', uploadRes.status, text)
-    throw new Error('图片上传失败')
+    throw new Error(text || '图片上传失败')
   }
 
-  return `${SB_URL}/storage/v1/object/public/${bucket}/${path}`
+  return `${SB_URL}/storage/v1/object/public/${REAL_BUCKET}/${path}`
 }
+
+
+
 
 // ================= 从 URL 提取存储路径 =================
 function extractStoragePath(url) {
