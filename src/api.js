@@ -527,19 +527,39 @@ export async function insertProductDesign(designData) {
  * 3. 从草稿创建产品（修改版：调用 API）
  */
 export async function createProductFromDraft(productData) {
-  const response = await fetch('/api/product-from-draft', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(productData),
-  });
+  try {
+    console.log('调用 /api/product-from-draft，数据：', productData);
+    
+    const response = await fetch('/api/product-from-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(productData),
+    });
 
-  const result = await response.json();
-  
-  if (!response.ok || !result.success) {
-    throw new Error(result.message || 'Create product failed');
+    console.log('API 响应状态：', response.status);
+    
+    // 先读取文本
+    const text = await response.text();
+    console.log('API 响应内容：', text);
+    
+    // 尝试解析 JSON
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON 解析失败，原始内容：', text);
+      throw new Error(`API 返回格式错误：${text.substring(0, 200)}`);
+    }
+    
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || result.error || `HTTP ${response.status}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('createProductFromDraft 错误：', error);
+    throw error;
   }
-
-  return result;
 }
 
 /**
