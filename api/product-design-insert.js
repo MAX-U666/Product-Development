@@ -1,4 +1,4 @@
-/**
+/***
  * /api/product-design-insert
  * 
  * POST 请求：创建产品设计记录（Supabase 版本）
