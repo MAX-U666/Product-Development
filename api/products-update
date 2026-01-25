@@ -1,4 +1,4 @@
-/**
+/***
  * /api/products-update
  * 
  * PUT 请求：更新产品信息
