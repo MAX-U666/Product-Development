@@ -479,8 +479,8 @@ export async function uploadToSupabaseStorage(file, folder = '') {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         file: base64,
-        bucket: 'product-images',
-        folder: folder,
+        bucket: 'bottle-library',
+        folder,
       }),
     });
 
