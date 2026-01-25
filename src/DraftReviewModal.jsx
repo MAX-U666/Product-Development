@@ -1,247 +1,405 @@
-// src/DraftReviewModal.jsx
-import React, { useState } from "react";
-import { X, CheckCircle, XCircle, AlertCircle } from "lucide-react";
-import { updateAIDraftStatus, createProductFromDraft } from "./api";
+// File: src/DraftReviewModal.jsx
 
-export default function DraftReviewModal({ draft, onClose, onReviewed, currentUser }) {
-  const [loading, setLoading] = useState(false);
-  const [reviewComment, setReviewComment] = useState('');
+import React, { useState, useEffect } from "react";
+import { X, CheckCircle, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import FieldRow from "./ProductFormAI/components/FieldRow";
+import { createProductFromDraft, updateDraftStatus } from "./api";
+import { getCurrentBeijingISO } from "./timeConfig";
 
-  // ✅ 修复：直接从表字段读取
-  const category = draft.category || '';
-  const market = draft.market || '';
-  const platform = draft.platform || '';
-  const positioning = draft.positioning || '';
-  const sellingPoint = draft.selling_point || draft.sellingPoint || '';
-  const ingredients = draft.ingredients || '';
-  const efficacy = draft.efficacy || '';
-  const volume = draft.volume || '';
-  const scent = draft.scent || '';
-  const color = draft.texture_color || draft.color || '';
-  const pricing = draft.pricing || '';
-  const title = draft.title || '';
-  const keywords = draft.keywords || '';
-  const packaging = draft.packaging_requirements || draft.packaging || '';
+export default function DraftReviewModal({ draft, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    positioning: "",
+    sellingPoint: "",
+    ingredients: "",
+    efficacy: "",
+    volume: "",
+    scent: "",
+    color: "",
+    pricing: "",
+    title: "",
+    keywords: "",
+    packaging: "",
+  });
 
-  // ✅ 审核通过 + 创建产品
-  const handleApprove = async () => {
-    if (!confirm('确定通过审核并创建产品吗？')) return;
+  const [reviewComment, setReviewComment] = useState("");
+  const [showCompetitors, setShowCompetitors] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-    setLoading(true);
-    try {
-      // 1. 更新草稿状态为"已通过"
-      await updateAIDraftStatus(draft.id, '已通过', currentUser?.id || null, reviewComment || '审核通过');
-
-      // 2. 创建正式产品
-      await createProductFromDraft(draft.id, currentUser?.id || null);
-
-      alert('✅ 审核通过！产品已创建，可在「全部产品」中查看');
-      onReviewed?.();
-    } catch (error) {
-      alert('操作失败：' + (error?.message || '未知错误'));
-    } finally {
-      setLoading(false);
+  // 初始化表单数据
+  useEffect(() => {
+    if (draft) {
+      setFormData({
+        positioning: draft.positioning || "",
+        sellingPoint: draft.selling_point || "",
+        ingredients: draft.ingredients || "",
+        efficacy: draft.efficacy || "",
+        volume: draft.volume || "",
+        scent: draft.scent || "",
+        color: draft.texture_color || "",
+        pricing: draft.pricing || "",
+        title: draft.title || "",
+        keywords: draft.keywords || "",
+        packaging: draft.packaging_requirements || "",
+      });
     }
-  };
+  }, [draft]);
 
-  // ✅ 审核拒绝
-  const handleReject = async () => {
+  const handleApprove = async () => {
     if (!reviewComment.trim()) {
-      alert('请填写拒绝原因');
+      alert("请填写审核意见");
       return;
     }
 
-    if (!confirm('确定拒绝这个草稿吗？')) return;
+    if (!confirm("确认通过审核并创建产品？")) return;
 
-    setLoading(true);
+    setSubmitting(true);
     try {
-      await updateAIDraftStatus(draft.id, '已拒绝', currentUser?.id || null, reviewComment);
-      alert('✅ 草稿已拒绝');
-      onReviewed?.();
-    } catch (error) {
-      alert('操作失败：' + (error?.message || '未知错误'));
+      // 1. 创建产品
+      const productData = {
+        develop_month: draft.develop_month,
+        category: draft.category,
+        market: draft.market,
+        platform: draft.platform,
+        positioning: formData.positioning,
+        selling_point: formData.sellingPoint,
+        ingredients: formData.ingredients,
+        main_efficacy: formData.efficacy,
+        volume: formData.volume,
+        scent: formData.scent,
+        texture_color: formData.color,
+        pricing: formData.pricing,
+        product_title: formData.title,
+        seo_keywords: formData.keywords,
+        packaging_design: formData.packaging,
+        stage: 1,
+        status: "进行中",
+        developer_id: draft.created_by,
+        is_ai_generated: true,
+        created_from_draft_id: draft.id,
+        has_design: false,
+        created_at: getCurrentBeijingISO(),
+      };
+
+      const createResult = await createProductFromDraft(productData);
+
+      if (!createResult?.success || !createResult?.product_id) {
+        throw new Error(createResult?.message || "创建产品失败");
+      }
+
+      const productId = createResult.product_id;
+
+      // 2. 更新草稿状态
+      await updateDraftStatus(draft.id, {
+        status: "已通过",
+        reviewed_by: draft.created_by, // TODO: 这里应该是当前审核人的 ID
+        review_comment: reviewComment,
+        reviewed_at: getCurrentBeijingISO(),
+      });
+
+      alert(`✅ 产品已创建成功！\n\n产品 ID: ${productId}`);
+      onSuccess?.();
+      onClose?.();
+    } catch (e) {
+      alert(`创建失败：${e.message}`);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
+  const handleReject = async () => {
+    if (!reviewComment.trim()) {
+      alert("拒绝时必须填写审核意见");
+      return;
+    }
+
+    if (!confirm("确认拒绝该草稿？")) return;
+
+    setSubmitting(true);
+    try {
+      await updateDraftStatus(draft.id, {
+        status: "已拒绝",
+        reviewed_by: draft.created_by, // TODO: 这里应该是当前审核人的 ID
+        review_comment: reviewComment,
+        reviewed_at: getCurrentBeijingISO(),
+      });
+
+      alert("✅ 已拒绝该草稿");
+      onSuccess?.();
+      onClose?.();
+    } catch (e) {
+      alert(`拒绝失败：${e.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!draft) return null;
+
+  const aiExplain = draft.ai_explanations || {};
+  const competitors = draft.competitors_data || [];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="relative z-10 w-[92vw] max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm">
+      <div className="relative w-full max-w-5xl overflow-hidden rounded-3xl bg-zinc-50 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-4">
           <div>
-            <div className="text-xl font-bold text-gray-800">📝 审核 AI 草稿</div>
-            <div className="text-sm text-gray-500 mt-1">
-              {category} · {market} · {platform}
+            <div className="text-base font-semibold text-zinc-900">审核 AI 草稿</div>
+            <div className="mt-1 text-xs text-zinc-500">
+              ID: {draft.id} | 创建时间: {new Date(draft.created_at).toLocaleString("zh-CN")}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
-            disabled={loading}
+            className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100"
+            aria-label="Close"
           >
-            <X size={24} />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Body - 可滚动 */}
-        <div className="overflow-y-auto flex-1 px-6 py-4">
-          {/* AI 元数据 */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-            <h3 className="font-semibold text-blue-900 mb-2">📊 AI 生成信息</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm text-blue-800">
-              <div>
-                <span className="font-medium">提取模型：</span>
-                {draft.extract_provider || '—'}
+        {/* Content */}
+        <div className="max-h-[75vh] overflow-y-auto px-5 py-5">
+          {/* 基础信息 */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+            <div className="text-sm font-semibold text-zinc-900">基础信息</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">开发月份</div>
+                <div className="font-semibold text-zinc-900">{draft.develop_month}</div>
               </div>
-              <div>
-                <span className="font-medium">生成模型：</span>
-                {draft.generate_provider || '—'}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">类目</div>
+                <div className="font-semibold text-zinc-900">{draft.category}</div>
               </div>
-              <div>
-                <span className="font-medium">算力成本：</span>
-                ${typeof draft.estimated_cost === 'number' ? draft.estimated_cost.toFixed(4) : '0.0000'}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">市场</div>
+                <div className="font-semibold text-zinc-900">{draft.market}</div>
               </div>
-              <div>
-                <span className="font-medium">创建时间：</span>
-                {draft.created_at ? new Date(draft.created_at).toLocaleString('zh-CN') : '—'}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">平台</div>
+                <div className="font-semibold text-zinc-900">{draft.platform}</div>
               </div>
             </div>
           </div>
 
-          {/* 产品方案内容 */}
-          <div className="space-y-4">
-            <FieldDisplay label="产品标题" value={title} />
-            <FieldDisplay label="产品定位" value={positioning} multiline />
-            <FieldDisplay label="核心卖点" value={sellingPoint} multiline />
-            <FieldDisplay label="主要成分" value={ingredients} />
-            <FieldDisplay label="主打功效" value={efficacy} />
-            
-            <div className="grid grid-cols-2 gap-4">
-              <FieldDisplay label="容量规格" value={volume} />
-              <FieldDisplay label="香味" value={scent} />
-              <FieldDisplay label="料体颜色" value={color} />
-              <FieldDisplay label="定价策略" value={pricing} />
-            </div>
+          {/* AI 生成的字段（可编辑）*/}
+          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+            <div className="text-sm font-semibold text-zinc-900">AI 生成内容（可编辑）</div>
 
-            <FieldDisplay label="搜索关键词" value={keywords} />
-            <FieldDisplay label="包装设计需求" value={packaging} multiline />
-          </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <FieldRow
+                label="产品定位"
+                value={formData.positioning}
+                onChange={(v) => setFormData((p) => ({ ...p, positioning: v }))}
+                placeholder="例如：高保湿修护、敏感肌可用..."
+                aiNote={aiExplain?.positioning?.note}
+                aiConfidence={aiExplain?.positioning?.confidence}
+                aiReason={aiExplain?.positioning?.reason}
+              />
 
-          {/* 竞品数据（如果有） */}
-          {draft.competitors_data && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
-                📦 查看竞品数据 ({Array.isArray(draft.competitors_data) ? draft.competitors_data.length : 0}个)
-              </summary>
-              <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-xs overflow-x-auto">
-                {JSON.stringify(draft.competitors_data, null, 2)}
-              </pre>
-            </details>
-          )}
+              <FieldRow
+                label="核心卖点"
+                multiline
+                value={formData.sellingPoint}
+                onChange={(v) => setFormData((p) => ({ ...p, sellingPoint: v }))}
+                placeholder="功效+成分+体验+人群..."
+                aiNote={aiExplain?.sellingPoint?.note || aiExplain?.selling_point?.note}
+                aiConfidence={aiExplain?.sellingPoint?.confidence || aiExplain?.selling_point?.confidence}
+                aiReason={aiExplain?.sellingPoint?.reason || aiExplain?.selling_point?.reason}
+              />
 
-          {/* 审核意见（仅拒绝时显示） */}
-          {draft.status === '待审核' && (
-            <div className="mt-6 bg-gray-50 border border-gray-200 rounded-xl p-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                审核意见（拒绝时必填）：
-              </label>
-              <textarea
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="请填写审核意见或修改建议..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
-                rows="3"
+              <FieldRow
+                label="主要成分"
+                value={formData.ingredients}
+                onChange={(v) => setFormData((p) => ({ ...p, ingredients: v }))}
+                placeholder="例如：Niacinamide, PDRN..."
+                aiNote={aiExplain?.ingredients?.note}
+                aiConfidence={aiExplain?.ingredients?.confidence}
+                aiReason={aiExplain?.ingredients?.reason}
+              />
+
+              <FieldRow
+                label="主打功效"
+                value={formData.efficacy}
+                onChange={(v) => setFormData((p) => ({ ...p, efficacy: v }))}
+                placeholder="例如：美白、保湿、修护..."
+                aiNote={aiExplain?.efficacy?.note}
+                aiConfidence={aiExplain?.efficacy?.confidence}
+                aiReason={aiExplain?.efficacy?.reason}
+              />
+
+              <FieldRow
+                label="容量"
+                value={formData.volume}
+                onChange={(v) => setFormData((p) => ({ ...p, volume: v }))}
+                placeholder="例如：400ml"
+                aiNote={aiExplain?.volume?.note}
+                aiConfidence={aiExplain?.volume?.confidence}
+                aiReason={aiExplain?.volume?.reason}
+              />
+
+              <FieldRow
+                label="香味"
+                value={formData.scent}
+                onChange={(v) => setFormData((p) => ({ ...p, scent: v }))}
+                placeholder="例如：花香/果香..."
+                aiNote={aiExplain?.scent?.note}
+                aiConfidence={aiExplain?.scent?.confidence}
+                aiReason={aiExplain?.scent?.reason}
+              />
+
+              <FieldRow
+                label="料体颜色"
+                value={formData.color}
+                onChange={(v) => setFormData((p) => ({ ...p, color: v }))}
+                placeholder="例如：乳白/透明..."
+                aiNote={aiExplain?.color?.note || aiExplain?.texture_color?.note}
+                aiConfidence={aiExplain?.color?.confidence || aiExplain?.texture_color?.confidence}
+                aiReason={aiExplain?.color?.reason || aiExplain?.texture_color?.reason}
+              />
+
+              <FieldRow
+                label="定价"
+                value={formData.pricing}
+                onChange={(v) => setFormData((p) => ({ ...p, pricing: v }))}
+                placeholder="例如：IDR 49,900"
+                aiNote={aiExplain?.pricing?.note}
+                aiConfidence={aiExplain?.pricing?.confidence}
+                aiReason={aiExplain?.pricing?.reason}
+              />
+
+              <FieldRow
+                label="产品标题"
+                multiline
+                value={formData.title}
+                onChange={(v) => setFormData((p) => ({ ...p, title: v }))}
+                placeholder="关键词 + 卖点 + 容量"
+                aiNote={aiExplain?.title?.note}
+                aiConfidence={aiExplain?.title?.confidence}
+                aiReason={aiExplain?.title?.reason}
+              />
+
+              <FieldRow
+                label="搜索关键词"
+                multiline
+                value={formData.keywords}
+                onChange={(v) => setFormData((p) => ({ ...p, keywords: v }))}
+                placeholder="keyword1, keyword2..."
+                aiNote={aiExplain?.keywords?.note}
+                aiConfidence={aiExplain?.keywords?.confidence}
+                aiReason={aiExplain?.keywords?.reason}
+              />
+
+              <FieldRow
+                label="包装设计需求"
+                multiline
+                value={formData.packaging}
+                onChange={(v) => setFormData((p) => ({ ...p, packaging: v }))}
+                placeholder="风格、色调、元素..."
+                aiNote={aiExplain?.packaging?.note || aiExplain?.packaging_requirements?.note}
+                aiConfidence={aiExplain?.packaging?.confidence || aiExplain?.packaging_requirements?.confidence}
+                aiReason={aiExplain?.packaging?.reason || aiExplain?.packaging_requirements?.reason}
               />
             </div>
+          </div>
+
+          {/* 竞品信息（可折叠）*/}
+          {competitors.length > 0 && (
+            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+              <button
+                onClick={() => setShowCompetitors(!showCompetitors)}
+                className="flex w-full items-center justify-between text-sm font-semibold text-zinc-900"
+              >
+                <span>竞品信息（{competitors.length} 个）</span>
+                {showCompetitors ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+
+              {showCompetitors && (
+                <div className="mt-4 grid gap-3">
+                  {competitors.map((comp, idx) => (
+                    <div key={idx} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm">
+                      <div className="font-semibold text-zinc-900">
+                        竞品 {idx + 1}: {comp.data?.listing?.title || comp.data?.name || "未知"}
+                      </div>
+                      <div className="mt-2 text-xs text-zinc-600">
+                        提取方式: {comp.mode === "url" ? "链接" : "截图"}
+                        {comp.url && (
+                          <>
+                            {" | "}
+                            <a
+                              href={comp.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              查看链接
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* 已审核信息 */}
-          {draft.status !== '待审核' && (
-            <div className={`mt-6 rounded-xl p-4 border ${
-              draft.status === '已通过' 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-red-50 border-red-200'
-            }`}>
-              <div className="flex items-start gap-2">
-                {draft.status === '已通过' ? (
-                  <CheckCircle size={20} className="text-green-600 mt-0.5 shrink-0" />
-                ) : (
-                  <XCircle size={20} className="text-red-600 mt-0.5 shrink-0" />
-                )}
-                <div className="flex-1">
-                  <div className={`text-sm font-semibold mb-1 ${
-                    draft.status === '已通过' ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {draft.status === '已通过' ? '✅ 已通过审核' : '❌ 已拒绝'}
-                  </div>
-                  {draft.review_comment && (
-                    <div className={`text-sm ${
-                      draft.status === '已通过' ? 'text-green-700' : 'text-red-700'
-                    }`}>
-                      <span className="font-medium">审核意见：</span>
-                      {draft.review_comment}
-                    </div>
-                  )}
-                  {draft.reviewed_at && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      审核时间：{new Date(draft.reviewed_at).toLocaleString('zh-CN')}
-                    </div>
-                  )}
+          {/* AI 元数据 */}
+          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+            <div className="text-sm font-semibold text-zinc-900">AI 元数据</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">提取模型</div>
+                <div className="font-semibold text-zinc-900">{draft.extract_provider || "—"}</div>
+              </div>
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">生成模型</div>
+                <div className="font-semibold text-zinc-900">{draft.generate_provider || "—"}</div>
+              </div>
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                <div className="text-xs text-zinc-500">预估成本</div>
+                <div className="font-semibold text-zinc-900">
+                  ${(draft.estimated_cost || 0).toFixed(4)}
                 </div>
               </div>
             </div>
-          )}
+          </div>
+
+          {/* 审核意见 */}
+          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+            <div className="text-sm font-semibold text-zinc-900">审核意见 *</div>
+            <textarea
+              className="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
+              rows={3}
+              placeholder="请填写审核意见（必填）"
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+            />
+          </div>
         </div>
 
-        {/* Footer - 操作按钮 */}
-        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 px-6 py-4 shrink-0">
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-5 py-4">
           <button
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            onClick={handleReject}
+            disabled={submitting}
+            className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
           >
-            关闭
+            <XCircle className="h-4 w-4" />
+            拒绝
           </button>
 
-          {draft.status === '待审核' && (
-            <>
-              <button
-                onClick={handleReject}
-                disabled={loading}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                <XCircle size={18} />
-                {loading ? '处理中...' : '拒绝'}
-              </button>
-
-              <button
-                onClick={handleApprove}
-                disabled={loading}
-                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                <CheckCircle size={18} />
-                {loading ? '处理中...' : '通过并创建产品'}
-              </button>
-            </>
-          )}
+          <button
+            onClick={handleApprove}
+            disabled={submitting}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <CheckCircle className="h-4 w-4" />
+            {submitting ? "处理中..." : "✅ 通过并创建产品"}
+          </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ✅ 字段展示组件
-function FieldDisplay({ label, value, multiline = false }) {
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <div className="text-xs font-medium text-gray-500 mb-1">{label}</div>
-      {multiline ? (
-        <div className="text-sm text-gray-900 whitespace-pre-wrap">{value || '—'}</div>
-      ) : (
-        <div className="text-sm text-gray-900">{value || '—'}</div>
-      )}
     </div>
   );
 }
