@@ -1,4 +1,4 @@
-/**
+/***
  * /api/upload-image
  * 
  * POST 请求：上传图片到 Supabase Storage
