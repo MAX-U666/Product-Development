@@ -80,7 +80,11 @@ export default function DraftReviewModal({ draft, onClose, onSuccess }) {
         created_at: getCurrentBeijingISO(),
       };
 
+      console.log('准备创建产品，数据：', productData);
+      
       const createResult = await createProductFromDraft(productData);
+      
+      console.log('API 返回结果：', createResult);
 
       if (!createResult?.success || !createResult?.product_id) {
         throw new Error(createResult?.message || "创建产品失败");
