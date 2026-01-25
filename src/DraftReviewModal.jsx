@@ -88,13 +88,8 @@ export default function DraftReviewModal({ draft, onClose, onSuccess }) {
 
       const productId = createResult.product_id;
 
-      // 2. 更新草稿状态
-      await updateDraftStatus(draft.id, {
-        status: "已通过",
-        reviewed_by: draft.created_by, // TODO: 这里应该是当前审核人的 ID
-        review_comment: reviewComment,
-        reviewed_at: getCurrentBeijingISO(),
-      });
+      // 2. 更新草稿状态（适配原有 API）
+      await updateDraftStatus(draft.id, 'approve', reviewComment, draft.created_by);
 
       alert(`✅ 产品已创建成功！\n\n产品 ID: ${productId}`);
       onSuccess?.();
@@ -116,12 +111,8 @@ export default function DraftReviewModal({ draft, onClose, onSuccess }) {
 
     setSubmitting(true);
     try {
-      await updateDraftStatus(draft.id, {
-        status: "已拒绝",
-        reviewed_by: draft.created_by, // TODO: 这里应该是当前审核人的 ID
-        review_comment: reviewComment,
-        reviewed_at: getCurrentBeijingISO(),
-      });
+      // 适配原有 API
+      await updateDraftStatus(draft.id, 'reject', reviewComment, draft.created_by);
 
       alert("✅ 已拒绝该草稿");
       onSuccess?.();
