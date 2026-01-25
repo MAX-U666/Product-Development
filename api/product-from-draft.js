@@ -1,4 +1,4 @@
-/**
+/***
  * /api/product-from-draft
  * 
  * POST 请求：从 AI 草稿创建产品
