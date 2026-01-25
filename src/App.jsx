@@ -1,4 +1,10 @@
 // File: src/App.jsx
+// ✅ 修改点：
+// 1. 导入 ProductDevEdit 组件
+// 2. 添加 selectedDevProduct 状态
+// 3. 在产品列表中添加【继续编辑】按钮（AI 产品 + stage=1）
+// 4. 添加 ProductDevEdit 弹窗
+
 import React, { useState, useEffect } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles } from 'lucide-react'
 import { fetchData, deleteData, fetchAIDrafts } from './api'
@@ -10,6 +16,7 @@ import ProductDetail from './ProductDetail'
 import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
 import AIDraftDashboard from './AIDraftDashboard'
+import ProductDevEdit from './ProductDevEdit'  // ✅ 1. 导入组件
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -19,20 +26,18 @@ export default function App() {
   const [showProductForm, setShowProductForm] = useState(false)
   const [showProductFormAI, setShowProductFormAI] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
+  const [selectedDevProduct, setSelectedDevProduct] = useState(null)  // ✅ 2. 添加状态
   const [loading, setLoading] = useState(true)
   
-  // ✅ 新增：待审核草稿数量
   const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
 
   useEffect(() => {
-    // 从 localStorage 恢复用户登录状态
     const savedUser = localStorage.getItem('currentUser')
     if (savedUser) {
       try {
         const user = JSON.parse(savedUser)
         setCurrentUser(user)
 
-        // 根据角色自动跳转初始 Tab
         if (user.role === '设计师') {
           setActiveTab('designer')
         } else if (user.role === '内容人员') {
@@ -59,7 +64,6 @@ export default function App() {
       setUsers(usersData || [])
       setProducts(productsData || [])
       
-      // ✅ 新增：加载待审核草稿数量
       await loadPendingDraftsCount()
     } catch (error) {
       console.error('加载失败:', error)
@@ -68,7 +72,6 @@ export default function App() {
     }
   }
 
-  // ✅ 新增：加载待审核草稿数量
   async function loadPendingDraftsCount() {
     try {
       const drafts = await fetchAIDrafts({ status: '待审核' })
@@ -119,7 +122,6 @@ export default function App() {
     }
   }
 
-  // ✅ 新增：AI 创建成功后刷新草稿数量
   async function handleAICreateSuccess() {
     await loadData()
     await loadPendingDraftsCount()
@@ -241,7 +243,6 @@ export default function App() {
             </button>
           )}
 
-          {/* ✅ 修改：AI 草稿 Tab - 带待审核数量角标 */}
           {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
             <button
               onClick={() => setActiveTab('ai_drafts')}
@@ -252,7 +253,6 @@ export default function App() {
               }`}
             >
               🤖 AI 草稿
-              {/* ✅ 待审核数量角标 */}
               {pendingDraftsCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {pendingDraftsCount > 99 ? '99+' : pendingDraftsCount}
@@ -330,7 +330,15 @@ export default function App() {
                       return (
                         <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 text-sm font-medium text-gray-800">
-                            {product.category || '未命名'}
+                            <div className="flex items-center gap-2">
+                              {product.category || '未命名'}
+                              {/* ✅ 3. AI 标签 */}
+                              {product.is_ai_generated && (
+                                <span className="rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-bold text-white">
+                                  🤖 AI
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{product.develop_month}</td>
                           <td className="px-6 py-4">
@@ -366,6 +374,17 @@ export default function App() {
                                 <Eye size={18} />
                               </button>
 
+                              {/* ✅ 4. 添加【继续编辑】按钮（AI 产品 + stage=1） */}
+                              {product.is_ai_generated && product.stage === 1 && (
+                                <button
+                                  onClick={() => setSelectedDevProduct(product)}
+                                  className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
+                                  title="继续编辑"
+                                >
+                                  📝 继续编辑
+                                </button>
+                              )}
+
                               {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
                                 <button
                                   onClick={() => handleDeleteProduct(product)}
@@ -395,7 +414,6 @@ export default function App() {
           <ContentDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
 
-        {/* ✅ 修改：传递 onRefresh 回调 */}
         {activeTab === 'ai_drafts' && (currentUser.role === '管理员' || currentUser.role === '开发人员') && (
           <AIDraftDashboard
             currentUser={currentUser}
@@ -409,7 +427,6 @@ export default function App() {
         <ProductForm currentUser={currentUser} onClose={() => setShowProductForm(false)} onSuccess={loadData} />
       )}
 
-      {/* ✅ 修改：传递 handleAICreateSuccess 回调 */}
       {showProductFormAI && (
         <ProductFormAI 
           currentUser={currentUser} 
@@ -425,6 +442,18 @@ export default function App() {
           currentUser={currentUser}
           onClose={() => setSelectedProduct(null)}
           onUpdate={loadData}
+        />
+      )}
+
+      {/* ✅ 5. 添加产品开发编辑弹窗 */}
+      {selectedDevProduct && (
+        <ProductDevEdit
+          product={selectedDevProduct}
+          onClose={() => setSelectedDevProduct(null)}
+          onSuccess={() => {
+            setSelectedDevProduct(null)
+            loadData()
+          }}
         />
       )}
     </div>
