@@ -2,6 +2,9 @@
 // ✅ 硬编码配置（简单直接）
 const SB_URL = 'https://ppzwadqyqjadfdklkvtw.supabase.co'
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwendhZHF5cWphZGZka2xrdnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4ODgzOTQsImV4cCI6MjA4NDQ2NDM5NH0.xRfWovMVy55OqFFeS3hi1bn7X3CMji-clm8Hzo0yBok'
+const STORAGE_BUCKET = 'bottle-library'
+
+
 
 function baseHeaders(extra = {}) {
   return {
@@ -479,7 +482,7 @@ export async function uploadToSupabaseStorage(file, folder = '') {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         file: base64,
-        bucket: 'product-images',
+        bucket: 'STORAGE_BUCKET',
         folder: folder,
       }),
     });
