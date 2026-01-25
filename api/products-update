@@ -1,0 +1,63 @@
+/**
+ * /api/products-update
+ * 
+ * PUT 请求：更新产品信息
+ */
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+export default async function handler(req, res) {
+  try {
+    if (req.method !== 'PUT') {
+      return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
+    }
+
+    const { id, ...updateData } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'MISSING_ID' });
+    }
+
+    // 更新产品
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        ...updateData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      console.error('[api/products-update] Supabase error:', error);
+      return res.status(500).json({ 
+        error: 'DATABASE_ERROR', 
+        message: error.message 
+      });
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({ 
+        error: 'NOT_FOUND', 
+        message: 'Product not found' 
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      data: data[0] 
+    });
+
+  } catch (e) {
+    console.error('[api/products-update] Error:', e);
+    return res.status(500).json({ 
+      error: 'INTERNAL_ERROR', 
+      message: String(e?.message || e) 
+    });
+  }
+}
