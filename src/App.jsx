@@ -148,53 +148,34 @@ export default function App() {
   }
 
   // ✅ 修复：点👁 快速预览逻辑
-  // 根据产品状态决定打开哪个弹窗：
-  // - stage=1 + 待复审 → ProductDetail（开发素材审核）
-  // - stage=3 + package_review_status=pending → ProductDetail（包装审核）
-  // - 有 AI 草稿 → DraftReviewModal（只读预览）
-  // - 其他 → ProductDetail
+  // AI 产品：所有审核都走 DraftReviewModal（统一审核页）
+  // 传统产品：走 ProductDetail
   async function openQuickPreview(product) {
-    // ✅ 1. 开发素材复审（stage=1，开发提交了瓶型图/参考图待管理员复审）
-    if (
-      product?.stage === 1 &&
-      (product?.dev_assets_status === "待复审" || product?.status === "待管理员复审")
-    ) {
-      setSelectedProduct(product)
-      return
-    }
-
-    // ✅ 2. 【修复】包装设计审核（stage=3，设计师提交了包装待管理员审核）
-    if (
-      product?.stage === 3 &&
-      product?.package_review_status === "pending"
-    ) {
-      setSelectedProduct(product)
-      return
-    }
-
-    // ✅ 3. 其他情况：尝试打开 AI 草稿预览（只读）
-    const draftId = product?.created_from_draft_id
-    if (!draftId) {
-      // 没有关联 AI 草稿，直接打开产品详情
-      setSelectedProduct(product)
-      return
-    }
-
-    try {
-      const d = await fetchAIDraftById(draftId)
-      if (!d) {
-        alert('未找到 AI 草稿，将打开产品详情')
+    // ========== AI 产品流程 ==========
+    if (product?.is_ai_generated && product?.created_from_draft_id) {
+      try {
+        const d = await fetchAIDraftById(product.created_from_draft_id)
+        if (!d) {
+          alert('未找到 AI 草稿，将打开产品详情')
+          setSelectedProduct(product)
+          return
+        }
+        // AI 产品统一打开 DraftReviewModal
+        // 在 DraftReviewModal 内部会根据 product 状态判断是否显示审核按钮
+        setQuickPreviewProduct(product)
+        setQuickPreviewDraft(d)
+        setQuickPreviewOpen(true)
+      } catch (e) {
+        console.error(e)
+        alert('读取 AI 草稿失败：' + (e?.message || e))
         setSelectedProduct(product)
-        return
       }
-      setQuickPreviewProduct(product)
-      setQuickPreviewDraft(d)
-      setQuickPreviewOpen(true)
-    } catch (e) {
-      console.error(e)
-      alert('读取 AI 草稿失败：' + (e?.message || e))
-      setSelectedProduct(product)
+      return
     }
+
+    // ========== 传统产品流程 ==========
+    // 直接打开 ProductDetail
+    setSelectedProduct(product)
   }
 
   if (loading) {
@@ -598,16 +579,23 @@ export default function App() {
         />
       )}
 
-      {/* 快速预览弹窗（AI草稿只读） */}
+      {/* 快速预览弹窗（AI产品统一审核页）*/}
       {quickPreviewOpen && quickPreviewDraft && (
         <DraftReviewModal
           draft={quickPreviewDraft}
           product={quickPreviewProduct}
           mode="view"
+          currentUser={currentUser}
           onClose={() => {
             setQuickPreviewOpen(false)
             setQuickPreviewDraft(null)
             setQuickPreviewProduct(null)
+          }}
+          onSuccess={() => {
+            setQuickPreviewOpen(false)
+            setQuickPreviewDraft(null)
+            setQuickPreviewProduct(null)
+            loadData()
           }}
         />
       )}
