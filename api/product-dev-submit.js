@@ -9,13 +9,14 @@
  * 
  * 成功后：stage=1, dev_assets_status='待复审', status='待管理员复审'。管理员审核通过后进入 stage=2（待接单）
  */
+
 // 提交产品数据时，判断是AI流程还是传统流程，状态和审核条件不同
 const submitProductForReview = async (productId, isAI = false) => {
   const productData = {
     productId,
     stage: isAI ? 'AI_draft_approved' : 'admin_review', // AI流程通过草稿审核后推进到 AI_draft_approved
-    status: '待审核',
-    dev_assets_status: isAI ? '待复审' : '待审核', // 根据流程不同，状态不同
+    status: '待审核', // 统一设置为待审核
+    dev_assets_status: isAI ? '待复审' : '待审核', // AI流程为待复审，传统流程为待审核
   };
 
   try {
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
     if (req.method === "OPTIONS") {
       return res.status(200).json({ ok: true });
     }
-    
+
     if (req.method !== "POST") {
       return res.status(405).json({ 
         error: "METHOD_NOT_ALLOWED", 
@@ -94,13 +95,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3. 标记进入【待复审】（管理员复审）：stage=1
+    // 3. 根据AI流程或传统流程，更新状态
+    const isAI = body.isAI || false;  // 根据请求中的isAI判断流程
+
     const { data, error: updateError } = await supabase
       .from("products")
       .update({
-        stage: 1,
-        dev_assets_status: "待复审",
-        status: "待管理员复审",
+        stage: isAI ? 'AI_draft_approved' : 'admin_review',  // 如果是AI流程，stage值为AI_draft_approved
+        dev_assets_status: isAI ? '待复审' : '待审核',  // 对应AI流程的状态
+        status: isAI ? '待审核' : '待管理员复审',  // 根据流程设置正确的status值
         develop_submit_time: new Date().toISOString(),
       })
       .eq("id", body.product_id)
