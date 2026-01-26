@@ -351,6 +351,22 @@ export async function createBottle(data) {
   return await insertData('bottles', data)
 }
 
+// ✅ 新增：根据 bottle_id 查询瓶型图 URL
+export async function fetchBottleById(bottleId) {
+  if (!bottleId) return null
+  
+  const url = new URL(`${SB_URL}/rest/v1/bottles`)
+  url.searchParams.set('select', 'id,name,img_url')
+  url.searchParams.set('id', `eq.${bottleId}`)
+  url.searchParams.set('limit', '1')
+
+  const res = await fetch(url.toString(), { headers: baseHeaders() })
+  if (!res.ok) return null
+  
+  const rows = await res.json()
+  return rows?.[0] || null
+}
+
 // ================= AI（Vercel Functions）=================
 // ⚠️ 重要：不要在前端直接调用 Gemini/Claude/OpenAI（会暴露 Key + CORS）
 // 这里统一走 Vercel Serverless Functions：/api/extract-competitor 与 /api/generate-plan
@@ -635,7 +651,7 @@ export async function updateProduct(productId, updateData) {
 
 
 
-// ✅ AI 草稿通过后：把草稿内容写入 products 的“统一字段”
+// ✅ AI 草稿通过后：把草稿内容写入 products 的"统一字段"
 // 规则：统一字段优先，其次用 ai_* 字段兜底；不覆盖已有非空字段（可选）
 export async function applyDraftToProductSpec(productId, draft, { overwrite = false } = {}) {
   const pick = (...keys) => {
@@ -679,7 +695,7 @@ export async function applyDraftToProductSpec(productId, draft, { overwrite = fa
 
   // overwrite=false 时：只填空，不覆盖已有字段
   if (!overwrite) {
-    // 如果你想严格“只填空”，需要先读 products 当前行再合并。
+    // 如果你想严格"只填空"，需要先读 products 当前行再合并。
     // 这里给一个轻量做法：在调用前把 product 行也传进来（见下方 B 方案）
   }
 
