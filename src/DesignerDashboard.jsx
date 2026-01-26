@@ -3,6 +3,13 @@ import { Package, Upload, CheckCircle, Clock, AlertCircle, Eye } from 'lucide-re
 import { updateData, uploadImage, fetchAIDraftById } from './api'
 import { formatTime, getCurrentBeijingISO } from './timeConfig'
 import DraftReviewModal from './DraftReviewModal'
+// 修改设计部待接单的产品过滤条件
+const filterProductsForDesigner = (products) => {
+  return products.filter(product => {
+    // AI流程和传统流程分开，只有stage = 2 且 status = "待接单" 的产品才可以接单
+    return product.stage === 'AI_draft_approved' || (product.stage === 'product_created' && product.status === '待审核');
+  });
+};
 
 // ✅ 状态机常量（推荐）
 const REVIEW_STATUS = {
