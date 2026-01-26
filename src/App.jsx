@@ -1,13 +1,10 @@
 // File: src/App.jsx
-// ✅ 在你原版基础上只新增：
-// - 👁 快速预览 AI草稿 + 开发瓶型/参考图（不影响原审核/接单功能）
-// - 引入 DraftReviewModal + fetchAIDraftById
-// - 新增 quickPreview 的 3 个 state + openQuickPreview 方法 + 底部 Modal 渲染
-// 其余保持你原逻辑不变
+// ✅ 修复版本 - 2026-01-26
+// 修复内容：AI产品在 stage=3 包装审核时，点👁能正确打开 ProductDetail（有审核按钮）
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles, ChevronDown } from 'lucide-react'
-import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api' // ✅ +fetchAIDraftById
+import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import ProductForm from './ProductForm'
@@ -17,9 +14,7 @@ import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
 import AIDraftDashboard from './AIDraftDashboard'
 import ProductDevEdit from './ProductDevEdit'
-import DraftReviewModal from './DraftReviewModal' // ✅ 新增：快速预览弹窗
-
-// ✅ 用户管理页（你需要新建 src/UserManagement.jsx）
+import DraftReviewModal from './DraftReviewModal'
 import UserManagement from './UserManagement'
 
 export default function App() {
@@ -30,17 +25,17 @@ export default function App() {
   const [showProductForm, setShowProductForm] = useState(false)
   const [showProductFormAI, setShowProductFormAI] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
-  const [selectedDevProduct, setSelectedDevProduct] = useState(null) // ✅ 产品开发编辑
+  const [selectedDevProduct, setSelectedDevProduct] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
 
-  // ✅ 新增：快速预览（AI草稿 + 开发素材）
+  // 快速预览（AI草稿 + 开发素材）
   const [quickPreviewOpen, setQuickPreviewOpen] = useState(false)
   const [quickPreviewDraft, setQuickPreviewDraft] = useState(null)
   const [quickPreviewProduct, setQuickPreviewProduct] = useState(null)
 
-  // ✅ 管理员下拉菜单
+  // 管理员下拉菜单
   const [showAdminMenu, setShowAdminMenu] = useState(false)
   const adminMenuRef = useRef(null)
 
@@ -67,7 +62,7 @@ export default function App() {
     loadData()
   }, [])
 
-  // ✅ 点击空白关闭管理员菜单
+  // 点击空白关闭管理员菜单
   useEffect(() => {
     function onDocClick(e) {
       if (!showAdminMenu) return
@@ -152,9 +147,14 @@ export default function App() {
     await loadPendingDraftsCount()
   }
 
-  // ✅ 新增：点👁 快速预览（优先弹 AI 草稿 + 开发素材）
+  // ✅ 修复：点👁 快速预览逻辑
+  // 根据产品状态决定打开哪个弹窗：
+  // - stage=1 + 待复审 → ProductDetail（开发素材审核）
+  // - stage=3 + package_review_status=pending → ProductDetail（包装审核）
+  // - 有 AI 草稿 → DraftReviewModal（只读预览）
+  // - 其他 → ProductDetail
   async function openQuickPreview(product) {
-    // ✅ 二次审核（开发素材复审）时：直接打开【产品详情】让管理员点“通过/驳回”
+    // ✅ 1. 开发素材复审（stage=1，开发提交了瓶型图/参考图待管理员复审）
     if (
       product?.stage === 1 &&
       (product?.dev_assets_status === "待复审" || product?.status === "待管理员复审")
@@ -163,9 +163,19 @@ export default function App() {
       return
     }
 
+    // ✅ 2. 【修复】包装设计审核（stage=3，设计师提交了包装待管理员审核）
+    if (
+      product?.stage === 3 &&
+      product?.package_review_status === "pending"
+    ) {
+      setSelectedProduct(product)
+      return
+    }
+
+    // ✅ 3. 其他情况：尝试打开 AI 草稿预览（只读）
     const draftId = product?.created_from_draft_id
     if (!draftId) {
-      // 没有草稿ID：保持你原来的行为
+      // 没有关联 AI 草稿，直接打开产品详情
       setSelectedProduct(product)
       return
     }
@@ -245,7 +255,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* ✅ 管理员下拉入口（只管理员看得到） */}
+              {/* 管理员下拉入口 */}
               {isAdmin && (
                 <div className="relative" ref={adminMenuRef}>
                   <button
@@ -294,7 +304,7 @@ export default function App() {
         </div>
       </nav>
 
-      {/* 标签导航（业务区，不放用户管理） */}
+      {/* 标签导航 */}
       <div className="bg-white border-b border-gray-200 px-6">
         <div className="flex gap-2">
           <button
@@ -430,14 +440,27 @@ export default function App() {
                         currentOwner = '业务/视觉部'
                       }
 
+                      // ✅ 判断是否需要审核（用于高亮显示）
+                      const needsReview = 
+                        (product.stage === 1 && product.dev_assets_status === '待复审') ||
+                        (product.stage === 3 && product.package_review_status === 'pending')
+
                       return (
-                        <tr key={product.id} className="hover:bg-gray-50 transition-colors">
+                        <tr 
+                          key={product.id} 
+                          className={`hover:bg-gray-50 transition-colors ${needsReview ? 'bg-yellow-50' : ''}`}
+                        >
                           <td className="px-6 py-4 text-sm font-medium text-gray-800">
                             <div className="flex items-center gap-2">
                               {product.category || '未命名'}
                               {product.is_ai_generated && (
                                 <span className="rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-bold text-white">
                                   🤖 AI
+                                </span>
+                              )}
+                              {needsReview && (
+                                <span className="rounded-full bg-yellow-500 px-2 py-0.5 text-xs font-bold text-white">
+                                  待审核
                                 </span>
                               )}
                             </div>
@@ -460,7 +483,9 @@ export default function App() {
                                   ? 'bg-blue-100 text-blue-700'
                                   : product.status === '测试失败'
                                   ? 'bg-red-100 text-red-700'
-                                  : 'bg-yellow-100 text-yellow-700'
+                                  : product.status === '待审核' || product.status === '待管理员复审'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-gray-100 text-gray-700'
                               }`}
                             >
                               {product.status}
@@ -473,9 +498,13 @@ export default function App() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <button
-                                onClick={() => openQuickPreview(product)} // ✅ 改这里：点👁优先弹草稿预览
-                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                title="查看详情/预览草稿"
+                                onClick={() => openQuickPreview(product)}
+                                className={`transition-colors ${
+                                  needsReview 
+                                    ? 'text-yellow-600 hover:text-yellow-800' 
+                                    : 'text-blue-600 hover:text-blue-800'
+                                }`}
+                                title={needsReview ? '点击审核' : '查看详情/预览草稿'}
                               >
                                 <Eye size={18} />
                               </button>
@@ -527,7 +556,6 @@ export default function App() {
           />
         )}
 
-        {/* ✅ 用户管理：不出现在业务 Tab，只从右上角管理员菜单进入 */}
         {activeTab === 'users' && isAdmin && (
           <UserManagement currentUser={currentUser} />
         )}
@@ -570,7 +598,7 @@ export default function App() {
         />
       )}
 
-      {/* ✅ 新增：快速预览弹窗（不会影响原审核/接单功能） */}
+      {/* 快速预览弹窗（AI草稿只读） */}
       {quickPreviewOpen && quickPreviewDraft && (
         <DraftReviewModal
           draft={quickPreviewDraft}
