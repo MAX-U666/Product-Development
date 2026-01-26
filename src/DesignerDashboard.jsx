@@ -11,6 +11,16 @@ const filterProductsForDesigner = (products) => {
   });
 };
 
+const showReviewButton = (product) => {
+  if (product.stage === 'product_created' && product.status === '待审核') {
+    return true;
+  }
+  return false;
+};
+
+
+
+
 // ✅ 状态机常量（推荐）
 const REVIEW_STATUS = {
   NONE: null,              // 未开始
