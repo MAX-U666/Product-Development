@@ -152,7 +152,7 @@ export default function DraftReviewModal({
         seo_keywords: formData.keywords,
         packaging_design: formData.packaging,
         stage: 1,
-        status: "进行中",
+        status: "开发补充中",
         developer_id: draft.created_by,
         is_ai_generated: true,
         created_from_draft_id: draft.id,
