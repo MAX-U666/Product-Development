@@ -1,10 +1,23 @@
 // File: src/ProductDevEdit.jsx
 // 产品开发编辑页面（stage=1）
-// 功能：编辑文案字段 + 上传瓶型和参考图 + 提交【开发素材复审】（二次审核）
+// 功能：编辑文案字段 + 上传瓶型和参考图 + 提交【开发素材复审】（交给管理员复审）
+// ✅ 本次修改点（在你原代码基础上改，不删结构）：
+// 1) 提交复审时：写 dev_assets_status="待复审"、status="待管理员复审"、stage=1（强制留在开发阶段）
+// 2) 移除 dev_assets_submit_time（避免 Supabase 400：列不存在 / schema cache）
+// 3) 提交提示文案同步更新
+// 4) 避免重复上传：已有线上URL且没有新file时不重复upload
+// 5) 释放 blob URL，防止内存泄露
 
 import React, { useState, useEffect } from "react";
 import { X, Upload, Trash2, Save, Send, Loader } from "lucide-react";
 import { updateData, uploadImage } from "./api";
+
+function isBlobUrl(u) {
+  return typeof u === "string" && u.startsWith("blob:");
+}
+function isHttpUrl(u) {
+  return typeof u === "string" && /^https?:\/\//i.test(u);
+}
 
 export default function ProductDevEdit({ product, onClose, onSuccess }) {
   // 文案字段
@@ -48,19 +61,30 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
         packaging_design: product.packaging_design || "",
       });
 
-      // 加载已有图片
+      // 加载已有图片（线上 URL）
       if (product.bottle_img) setBottlePreview(product.bottle_img);
-      if (product.ref_packaging_url_1) {
-        setRefPreviews((prev) => [product.ref_packaging_url_1, prev[1], prev[2]]);
-      }
-      if (product.ref_packaging_url_2) {
-        setRefPreviews((prev) => [prev[0], product.ref_packaging_url_2, prev[2]]);
-      }
-      if (product.ref_packaging_url_3) {
-        setRefPreviews((prev) => [prev[0], prev[1], product.ref_packaging_url_3]);
-      }
+
+      setRefPreviews((prev) => {
+        const next = [...prev];
+        if (product.ref_packaging_url_1) next[0] = product.ref_packaging_url_1;
+        if (product.ref_packaging_url_2) next[1] = product.ref_packaging_url_2;
+        if (product.ref_packaging_url_3) next[2] = product.ref_packaging_url_3;
+        return next;
+      });
     }
-  }, [product]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id]);
+
+  // 组件卸载时释放 blob URLs
+  useEffect(() => {
+    return () => {
+      if (isBlobUrl(bottlePreview)) URL.revokeObjectURL(bottlePreview);
+      refPreviews.forEach((u) => {
+        if (isBlobUrl(u)) URL.revokeObjectURL(u);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 处理瓶型图片上传
   const handleBottleChange = (e) => {
@@ -71,6 +95,9 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
       alert("图片大小不能超过 2MB");
       return;
     }
+
+    // 释放旧 blob
+    if (isBlobUrl(bottlePreview)) URL.revokeObjectURL(bottlePreview);
 
     setBottleFile(file);
     const preview = URL.createObjectURL(file);
@@ -91,10 +118,13 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
     newFiles[index] = file;
     setRefFiles(newFiles);
 
-    const preview = URL.createObjectURL(file);
-    const newPreviews = [...refPreviews];
-    newPreviews[index] = preview;
-    setRefPreviews(newPreviews);
+    // 释放旧 blob
+    setRefPreviews((prev) => {
+      const next = [...prev];
+      if (isBlobUrl(next[index])) URL.revokeObjectURL(next[index]);
+      next[index] = URL.createObjectURL(file);
+      return next;
+    });
   };
 
   // 删除参考图
@@ -103,12 +133,12 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
     newFiles[index] = null;
     setRefFiles(newFiles);
 
-    const newPreviews = [...refPreviews];
-    if (newPreviews[index].startsWith("blob:")) {
-      URL.revokeObjectURL(newPreviews[index]);
-    }
-    newPreviews[index] = "";
-    setRefPreviews(newPreviews);
+    setRefPreviews((prev) => {
+      const next = [...prev];
+      if (isBlobUrl(next[index])) URL.revokeObjectURL(next[index]);
+      next[index] = "";
+      return next;
+    });
   };
 
   // 保存草稿（不改 stage）
@@ -117,13 +147,12 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
     try {
       const updates = { ...formData };
 
-      // 上传瓶型图（如果有新文件）
+      // ✅ 只有有新 file 才 upload
       if (bottleFile) {
         const url = await uploadImage("product-images", bottleFile);
         updates.bottle_img = url;
       }
 
-      // 上传参考图（如果有新文件）
       for (let i = 0; i < 3; i++) {
         if (refFiles[i]) {
           const url = await uploadImage("product-images", refFiles[i]);
@@ -137,35 +166,43 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
       alert("✅ 保存成功！");
       onSuccess?.();
     } catch (e) {
-      alert(`保存失败：${e.message}`);
+      alert(`保存失败：${e?.message || String(e)}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // 提交开发素材复审（不改 stage；进入待复审状态）
+  // 提交开发素材复审（交给管理员复审；强制留在 stage=1）
   const handleSubmit = async () => {
-    // 检查最低门槛
-    const hasBottle = bottleFile || bottlePreview;
-    const hasRef1 = refFiles[0] || refPreviews[0];
+    // 检查最低门槛：至少瓶型1张 + 参考图1张
+    const hasBottle = !!(bottleFile || bottlePreview);
+    const hasRef1 = !!(refFiles[0] || refPreviews[0]);
 
     if (!hasBottle || !hasRef1) {
-      alert("⚠️ 需要至少：\n\n• 瓶型图 1 张\n• 参考包装图 1 张\n\n才能提交进入设计！");
+      alert("⚠️ 需要至少：\n\n• 瓶型图 1 张\n• 参考包装图 1 张\n\n才能提交管理员复审！");
       return;
     }
 
-    if (!confirm("确认提交开发素材复审？\n\n提交后将进入【待复审】状态，管理员审核通过后才会进入设计待接单。")) {
+    if (
+      !confirm(
+        "确认提交管理员复审？\n\n提交后将进入【待管理员复审】状态，管理员审核通过后才会进入设计待接单。"
+      )
+    ) {
       return;
     }
 
     setSubmitting(true);
     try {
-      // 1. 先保存（确保图片已上传）
+      // 1) 先保存（确保图片已上传）
       const updates = { ...formData };
 
+      // ✅ 有新 file 才 upload；如果只是已有线上 URL，不重复上传
       if (bottleFile) {
         const url = await uploadImage("product-images", bottleFile);
         updates.bottle_img = url;
+      } else if (isHttpUrl(bottlePreview)) {
+        // 保底：如果已有线上 URL，就确保字段存在（可选）
+        updates.bottle_img = bottlePreview;
       }
 
       for (let i = 0; i < 3; i++) {
@@ -173,23 +210,29 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
           const url = await uploadImage("product-images", refFiles[i]);
           const fieldName = `ref_packaging_url_${i + 1}`;
           updates[fieldName] = url;
+        } else if (isHttpUrl(refPreviews[i])) {
+          const fieldName = `ref_packaging_url_${i + 1}`;
+          updates[fieldName] = refPreviews[i];
         }
       }
 
       await updateData("products", product.id, updates);
 
-      // 2. 标记进入【待复审】（二次审核）
+      // 2) 标记进入【待复审】（管理员复审）
+      // ✅ 强制 stage=1，避免 stage=2 + 待复审 的矛盾态
       await updateData("products", product.id, {
         dev_assets_status: "待复审",
-        dev_assets_submit_time: new Date().toISOString(),
-        status: "开发复审中",
+        status: "待管理员复审",
+        stage: 1,
       });
 
-      alert("✅ 已提交开发素材复审！\n\n下一步：管理员在【全部产品-详情】里审核通过后，才会进入设计待接单。 ");
+      alert(
+        "✅ 已提交管理员复审！\n\n下一步：管理员在【全部产品】点👁查看详情，在详情中审核通过后，产品才会进入设计待接单。"
+      );
       onSuccess?.();
       onClose?.();
     } catch (e) {
-      alert(`提交失败：${e.message}`);
+      alert(`提交失败：${e?.message || String(e)}`);
     } finally {
       setSubmitting(false);
     }
@@ -205,9 +248,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
           <div>
-            <div className="text-base font-semibold text-zinc-900">
-              📝 产品开发 - Stage 1
-            </div>
+            <div className="text-base font-semibold text-zinc-900">📝 产品开发 - Stage 1</div>
             <div className="mt-1 text-xs text-zinc-600">
               产品 ID: {product.id} | 继续完善资料并上传瓶型和参考图
             </div>
@@ -356,9 +397,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
               <div className="text-sm font-semibold text-zinc-900">
                 🍾 瓶型图 <span className="text-red-600">*</span>
               </div>
-              {bottlePreview && (
-                <span className="text-xs font-semibold text-green-600">✓ 已上传</span>
-              )}
+              {bottlePreview && <span className="text-xs font-semibold text-green-600">✓ 已上传</span>}
             </div>
 
             {!bottlePreview ? (
@@ -378,7 +417,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
                 <img src={bottlePreview} alt="瓶型" className="h-40 w-full object-cover" />
                 <button
                   onClick={() => {
-                    if (bottlePreview.startsWith("blob:")) URL.revokeObjectURL(bottlePreview);
+                    if (isBlobUrl(bottlePreview)) URL.revokeObjectURL(bottlePreview);
                     setBottlePreview("");
                     setBottleFile(null);
                   }}
@@ -439,8 +478,8 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
 
           {/* 提示 */}
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-            ⚠️ 提示：必须上传【瓶型图1张 + 参考包装图至少1张】才能提交【开发素材复审】。
-            复审通过后，产品才会进入设计待接单。
+            ⚠️ 提示：必须上传【瓶型图1张 + 参考包装图至少1张】才能提交【管理员复审】。
+            审核通过后，产品才会进入设计待接单。
           </div>
         </div>
 
@@ -486,7 +525,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  提交开发复审
+                  提交管理员复审
                 </>
               )}
             </button>
