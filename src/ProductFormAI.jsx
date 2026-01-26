@@ -24,6 +24,31 @@ import { getCurrentBeijingISO } from "./timeConfig";
  * 后端只需要根据 input 类型分支处理即可。
  */
 
+const handleDevAssetsApprove = async () => {
+  if (!confirm("确认通过开发复审？通过后将进入设计待接单")) return;
+
+  try {
+    await updateData("products", product.id, {
+      dev_assets_status: "已通过",
+      dev_assets_reviewed_at: new Date().toISOString(),
+      dev_assets_reviewed_by: currentUser.id,
+      dev_assets_review_comment: reviewComment || "审核通过",
+      stage: 2,
+      status: "待接单",
+    });
+
+    alert("✅ 开发复审已通过，已进入设计待接单");
+    onRefresh?.();
+  } catch (e) {
+    alert("❌ 审核失败：" + e.message);
+  }
+};
+
+
+
+
+
+
 const STORAGE_KEY = "ai_config";
 
 const CATEGORIES = ["洗发水", "沐浴露", "身体乳", "护发素", "弹力素", "护手霜"];
@@ -38,20 +63,6 @@ const PROVIDER_META = {
   volcengine: { label: "VolcEngine(火山)" },
   deepseek: { label: "DeepSeek" },
 };
-
-
-
-await updateData("products", product.id, {
-  dev_assets_status: "已通过",
-  dev_assets_reviewed_at: new Date().toISOString(),
-  dev_assets_reviewed_by: currentUser.id,
-  dev_assets_review_comment: reviewComment, // 你建的字段名
-  stage: 2,
-  status: "待接单",
-});
-
-
-
 
 
 
