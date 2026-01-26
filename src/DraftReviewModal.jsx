@@ -6,7 +6,7 @@ import FieldRow from "./ProductFormAI/components/FieldRow";
 import { createProductFromDraft, updateDraftStatus } from "./api";
 import { getCurrentBeijingISO } from "./timeConfig";
 
-export default function DraftReviewModal({ draft, onClose, onSuccess }) {
+export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "review" }) {
   const [formData, setFormData] = useState({
     positioning: "",
     sellingPoint: "",
