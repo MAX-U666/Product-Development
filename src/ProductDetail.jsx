@@ -104,6 +104,36 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
     }
   }
 
+const [draftModalOpen, setDraftModalOpen] = useState(false)
+const [activeDraft, setActiveDraft] = useState(null)
+const [draftLoading, setDraftLoading] = useState(false)
+
+const handleViewAIDraft = async () => {
+  const draftId = product?.created_from_draft_id
+  if (!draftId) {
+    alert('该任务未关联 AI 草稿（created_from_draft_id 为空）')
+    return
+  }
+  setDraftLoading(true)
+  try {
+    const d = await fetchAIDraftById(draftId)
+    if (!d) {
+      alert('未找到 AI 草稿（可能已删除或权限问题）')
+      return
+    }
+    setActiveDraft(d)
+    setDraftModalOpen(true)
+  } catch (e) {
+    alert(`读取 AI 草稿失败：${e.message || e}`)
+  } finally {
+    setDraftLoading(false)
+  }
+}
+
+
+  
+
+  
   // ✅ 新增：审核通过
   const handleApprove = async () => {
     if (!confirm('确定通过审核吗？通过后将自动进入下一阶段。')) return
