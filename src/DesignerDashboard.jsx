@@ -1,7 +1,9 @@
+// File: src/DesignerDashboard.jsx
 import React, { useState, useMemo } from 'react'
-import { Package, Upload, CheckCircle, Clock, AlertCircle } from 'lucide-react'
-import { updateData, uploadImage } from './api'
+import { Package, Upload, CheckCircle, Clock, AlertCircle, Eye } from 'lucide-react'
+import { updateData, uploadImage, fetchAIDraftById } from './api'
 import { formatTime, getCurrentBeijingISO } from './timeConfig'
+import DraftReviewModal from './DraftReviewModal'
 
 // ✅ 状态机常量（推荐）
 const REVIEW_STATUS = {
@@ -16,6 +18,12 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
   const [uploading, setUploading] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [designFile, setDesignFile] = useState(null)
+
+  // ✅ 新增：查看 AI 草稿 Modal 相关
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [activeDraft, setActiveDraft] = useState(null)
+  const [activeDraftProduct, setActiveDraftProduct] = useState(null)
+  const [draftLoadingId, setDraftLoadingId] = useState(null)
 
   // 待接单：阶段1 且 没有设计师
   const pendingProducts = useMemo(() => {
@@ -37,6 +45,31 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
         p.package_review_status === REVIEW_STATUS.APPROVED
     )
   }, [products, currentUser.id])
+
+  // ✅ 新增：打开 AI 草稿
+  const openAIDraft = async (product) => {
+    const draftId = product?.created_from_draft_id
+    if (!draftId) {
+      alert('该任务未关联 AI 草稿（created_from_draft_id 为空）')
+      return
+    }
+
+    setDraftLoadingId(product.id)
+    try {
+      const d = await fetchAIDraftById(draftId)
+      if (!d) {
+        alert('未找到 AI 草稿（可能已删除或权限问题）')
+        return
+      }
+      setActiveDraft(d)
+      setActiveDraftProduct(product) // ✅ 关键：把产品传进去，让草稿里展示瓶型图/参考包装图
+      setDraftModalOpen(true)
+    } catch (e) {
+      alert(`读取 AI 草稿失败：${e?.message || e}`)
+    } finally {
+      setDraftLoadingId(null)
+    }
+  }
 
   // 接单
   async function handleAcceptTask(product) {
@@ -322,6 +355,18 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                   {/* 操作区：审核中禁止操作 */}
                   {!isPending && (
                     <div className="border-t border-gray-200 pt-4">
+                      {/* ✅ 新增：查看 AI 草稿（放在上传区上方） */}
+                      <div className="mb-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openAIDraft(product)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm"
+                        >
+                          <Eye className="w-4 h-4" />
+                          {draftLoadingId === product.id ? '加载中…' : '查看AI草稿'}
+                        </button>
+                      </div>
+
                       <div className="flex items-end gap-3">
                         {/* 文件选择 */}
                         <div className="flex-1">
@@ -377,6 +422,18 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                         <Clock size={16} />
                         设计稿已提交，正在等待管理员审核...
                       </p>
+
+                      {/* ✅ 审核中也允许查看 AI 草稿（不影响任何状态） */}
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openAIDraft(product)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-200 bg-white hover:bg-yellow-50 text-sm"
+                        >
+                          <Eye className="w-4 h-4" />
+                          {draftLoadingId === product.id ? '加载中…' : '查看AI草稿'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -385,6 +442,20 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
           </div>
         )}
       </div>
+
+      {/* ✅ 渲染 AI 草稿 Modal（只读） */}
+      {draftModalOpen && activeDraft && (
+        <DraftReviewModal
+          draft={activeDraft}
+          product={activeDraftProduct}
+          mode="view"
+          onClose={() => {
+            setDraftModalOpen(false)
+            setActiveDraft(null)
+            setActiveDraftProduct(null)
+          }}
+        />
+      )}
     </div>
   )
 }
