@@ -1,10 +1,10 @@
 // File: src/ProductDevEdit.jsx
 // 产品开发编辑页面（stage=1）
-// 功能：编辑文案字段 + 上传瓶型和参考图 + 提交进入设计
+// 功能：编辑文案字段 + 上传瓶型和参考图 + 提交【开发素材复审】（二次审核）
 
 import React, { useState, useEffect } from "react";
 import { X, Upload, Trash2, Save, Send, Loader } from "lucide-react";
-import { updateData, uploadImage, fetchData } from "./api";
+import { updateData, uploadImage } from "./api";
 
 export default function ProductDevEdit({ product, onClose, onSuccess }) {
   // 文案字段
@@ -143,7 +143,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
     }
   };
 
-  // 提交进入设计（改 stage=2）
+  // 提交开发素材复审（不改 stage；进入待复审状态）
   const handleSubmit = async () => {
     // 检查最低门槛
     const hasBottle = bottleFile || bottlePreview;
@@ -154,7 +154,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
       return;
     }
 
-    if (!confirm("确认提交进入设计阶段？\n\n提交后将进入待接单状态。")) {
+    if (!confirm("确认提交开发素材复审？\n\n提交后将进入【待复审】状态，管理员审核通过后才会进入设计待接单。")) {
       return;
     }
 
@@ -178,20 +178,14 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
 
       await updateData("products", product.id, updates);
 
-      // 2. 调用提交 API
-      const response = await fetch("/api/product-dev-submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: product.id }),
+      // 2. 标记进入【待复审】（二次审核）
+      await updateData("products", product.id, {
+        dev_assets_status: "待复审",
+        dev_assets_submit_time: new Date().toISOString(),
+        status: "开发复审中",
       });
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "提交失败");
-      }
-
-      alert("✅ 已成功提交进入设计阶段！");
+      alert("✅ 已提交开发素材复审！\n\n下一步：管理员在【全部产品-详情】里审核通过后，才会进入设计待接单。 ");
       onSuccess?.();
       onClose?.();
     } catch (e) {
@@ -445,7 +439,8 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
 
           {/* 提示 */}
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-            ⚠️ 提示：必须上传【瓶型图1张 + 参考包装图至少1张】才能提交进入设计阶段
+            ⚠️ 提示：必须上传【瓶型图1张 + 参考包装图至少1张】才能提交【开发素材复审】。
+            复审通过后，产品才会进入设计待接单。
           </div>
         </div>
 
@@ -491,7 +486,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  提交进入设计
+                  提交开发复审
                 </>
               )}
             </button>
