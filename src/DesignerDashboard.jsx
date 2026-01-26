@@ -51,7 +51,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
 
   // 待接单：阶段1 且 没有设计师
   const pendingProducts = useMemo(() => {
-    return products.filter((p) => p.stage === 1 && !p.package_designer_id)
+    return products.filter((p) => p.stage === 2 && p.status === '待接单' && !p.package_designer_id)
   }, [products])
 
   // 我的任务：我接单的，阶段<=3 都显示
@@ -74,6 +74,10 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
   async function handleAcceptTask(product) {
     if (!confirm(`确定接单：${product.category || '未命名'}？`)) return
 
+    if (product.stage !== 2 || product.status !== '待接单') {
+      alert('该产品未通过审核或未进入【待接单】阶段，设计部不能接单。')
+      return
+    }
     try {
       await updateData('products', product.id, {
         package_designer_id: currentUser.id,
