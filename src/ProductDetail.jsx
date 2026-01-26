@@ -1,13 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { X, ExternalLink, Image as ImageIcon, Link as LinkIcon, Package, Trash2, CheckCircle, XCircle } from 'lucide-react'
-import { fetchData, deleteProduct, updateData } from './api'
+import { X, ExternalLink, Image as ImageIcon, Link as LinkIcon, Package, Trash2, CheckCircle, XCircle, Eye } from 'lucide-react'
+import { fetchData, deleteProduct, updateData, fetchAIDraftById } from './api'
 import { formatTime, getCurrentBeijingISO } from './timeConfig'
 
 import DraftReviewModal from './DraftReviewModal'
-import { fetchAIDraftById } from './api'
-import { Eye } from 'lucide-react'
-
-
 
 function safeOpen(url) {
   if (!url) return
@@ -50,7 +46,7 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
   const [bottle, setBottle] = useState(bottleProp || null)
   const [imgPreview, setImgPreview] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  
+
   // ✅ 新增：审核相关状态
   const [isReviewing, setIsReviewing] = useState(false)
   const [reviewNote, setReviewNote] = useState('')
@@ -86,8 +82,12 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
   // 删除产品
   const handleDelete = async () => {
     const productName = product.product_name || product.category || '未命名产品'
-    
-    if (!confirm(`⚠️ 确定要删除产品"${productName}"吗？\n\n此操作将同时删除：\n• 数据库记录\n• 所有相关图片\n\n此操作不可恢复！`)) {
+
+    if (
+      !confirm(
+        `⚠️ 确定要删除产品"${productName}"吗？\n\n此操作将同时删除：\n• 数据库记录\n• 所有相关图片\n\n此操作不可恢复！`
+      )
+    ) {
       return
     }
 
@@ -104,36 +104,35 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
     }
   }
 
-const [draftModalOpen, setDraftModalOpen] = useState(false)
-const [activeDraft, setActiveDraft] = useState(null)
-const [draftLoading, setDraftLoading] = useState(false)
+  // =========================
+  // ✅ 新增：查看 AI 草稿（全量）
+  // =========================
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [activeDraft, setActiveDraft] = useState(null)
+  const [draftLoading, setDraftLoading] = useState(false)
 
-const handleViewAIDraft = async () => {
-  const draftId = product?.created_from_draft_id
-  if (!draftId) {
-    alert('该任务未关联 AI 草稿（created_from_draft_id 为空）')
-    return
-  }
-  setDraftLoading(true)
-  try {
-    const d = await fetchAIDraftById(draftId)
-    if (!d) {
-      alert('未找到 AI 草稿（可能已删除或权限问题）')
+  const handleViewAIDraft = async () => {
+    const draftId = product?.created_from_draft_id
+    if (!draftId) {
+      alert('该任务未关联 AI 草稿（created_from_draft_id 为空）')
       return
     }
-    setActiveDraft(d)
-    setDraftModalOpen(true)
-  } catch (e) {
-    alert(`读取 AI 草稿失败：${e.message || e}`)
-  } finally {
-    setDraftLoading(false)
+    setDraftLoading(true)
+    try {
+      const d = await fetchAIDraftById(draftId)
+      if (!d) {
+        alert('未找到 AI 草稿（可能已删除或权限问题）')
+        return
+      }
+      setActiveDraft(d)
+      setDraftModalOpen(true)
+    } catch (e) {
+      alert(`读取 AI 草稿失败：${e.message || e}`)
+    } finally {
+      setDraftLoading(false)
+    }
   }
-}
 
-
-  
-
-  
   // ✅ 新增：审核通过
   const handleApprove = async () => {
     if (!confirm('确定通过审核吗？通过后将自动进入下一阶段。')) return
@@ -171,7 +170,7 @@ const handleViewAIDraft = async () => {
     try {
       // 获取当前的历史记录
       const currentHistory = Array.isArray(product.review_history) ? product.review_history : []
-      
+
       // 添加新的退回记录
       const newHistory = [
         ...currentHistory,
@@ -204,12 +203,11 @@ const handleViewAIDraft = async () => {
   if (!product) return null
 
   // ✅ 判断是否显示审核区域
-  const showReviewSection = currentUser?.role === '管理员' && 
-                           product.stage === 3 && 
-                           product.package_review_status === 'pending'
+  const showReviewSection =
+    currentUser?.role === '管理员' && product.stage === 3 && product.package_review_status === 'pending'
 
   // 找到设计师信息
-  const designer = users.find(u => u.id === product.package_designer_id)
+  const designer = users.find((u) => u.id === product.package_designer_id)
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -231,6 +229,17 @@ const handleViewAIDraft = async () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* ✅ 新增：查看 AI 草稿按钮（放在任务详情头部右侧） */}
+            <button
+              onClick={handleViewAIDraft}
+              disabled={draftLoading}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              title="查看该产品关联的 AI 草稿"
+            >
+              <Eye size={16} />
+              {draftLoading ? '加载中...' : '查看AI草稿'}
+            </button>
+
             {/* 删除按钮（仅管理员和开发人员） */}
             {(currentUser?.role === '管理员' || currentUser?.role === '开发人员') && (
               <button
@@ -256,9 +265,7 @@ const handleViewAIDraft = async () => {
           {/* ✅ 新增：审核区域（仅管理员且产品在待审核状态） */}
           {showReviewSection && (
             <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-6">
-              <h3 className="text-lg font-bold text-yellow-800 mb-4 flex items-center gap-2">
-                ⚠️ 待审核 - 包装设计稿
-              </h3>
+              <h3 className="text-lg font-bold text-yellow-800 mb-4 flex items-center gap-2">⚠️ 待审核 - 包装设计稿</h3>
 
               {designer && (
                 <div className="mb-4 text-sm text-gray-700">
@@ -282,9 +289,7 @@ const handleViewAIDraft = async () => {
 
               {/* 审核意见 */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  审核意见（退回时必填）：
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">审核意见（退回时必填）：</label>
                 <textarea
                   value={reviewNote}
                   onChange={(e) => setReviewNote(e.target.value)}
@@ -342,7 +347,7 @@ const handleViewAIDraft = async () => {
 
               <InfoRow label="开发时间">{product.develop_time || '-'}</InfoRow>
               <InfoRow label="创建时间">{formatTime(product.created_at)}</InfoRow>
-              
+
               {/* ✅ 新增：包装设计信息 */}
               {product.package_designer_id && (
                 <>
@@ -351,15 +356,17 @@ const handleViewAIDraft = async () => {
                     <InfoRow label="设计提交时间">{formatTime(product.package_design_time)}</InfoRow>
                   )}
                   <InfoRow label="审核状态">
-                    <span className={`px-3 py-1 rounded-full text-xs ${
-                      product.package_review_status === 'approved' 
-                        ? 'bg-green-100 text-green-700'
-                        : product.package_review_status === 'rejected'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {product.package_review_status === 'approved' 
-                        ? '已通过' 
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs ${
+                        product.package_review_status === 'approved'
+                          ? 'bg-green-100 text-green-700'
+                          : product.package_review_status === 'rejected'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {product.package_review_status === 'approved'
+                        ? '已通过'
                         : product.package_review_status === 'rejected'
                         ? '需修改'
                         : '待审核'}
@@ -384,14 +391,16 @@ const handleViewAIDraft = async () => {
                     src={product.package_design_url}
                     onClick={() => setImgPreview(product.package_design_url)}
                   />
-                  
+
                   {/* 审核意见显示 */}
                   {product.package_review_note && (
-                    <div className={`mt-3 p-3 rounded-lg border ${
-                      product.package_review_status === 'rejected'
-                        ? 'bg-red-50 border-red-200'
-                        : 'bg-green-50 border-green-200'
-                    }`}>
+                    <div
+                      className={`mt-3 p-3 rounded-lg border ${
+                        product.package_review_status === 'rejected'
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-green-50 border-green-200'
+                      }`}
+                    >
                       <p className="text-xs font-medium text-gray-700 mb-1">审核意见：</p>
                       <p className="text-sm text-gray-800">{product.package_review_note}</p>
                     </div>
@@ -406,11 +415,7 @@ const handleViewAIDraft = async () => {
                   <div className="font-semibold text-gray-900">参考包装</div>
                 </div>
 
-                <ImgCard
-                  title="参考设计图片"
-                  src={product.ref_design_img}
-                  onClick={() => setImgPreview(product.ref_design_img)}
-                />
+                <ImgCard title="参考设计图片" src={product.ref_design_img} onClick={() => setImgPreview(product.ref_design_img)} />
               </div>
 
               {/* 瓶型 */}
@@ -456,11 +461,7 @@ const handleViewAIDraft = async () => {
 
                   <div className="text-xs text-gray-500 break-all mb-3">{c.url || '-'}</div>
 
-                  <ImgCard
-                    title={`竞品图 ${c.idx}`}
-                    src={c.img}
-                    onClick={() => setImgPreview(c.img)}
-                  />
+                  <ImgCard title={`竞品图 ${c.idx}`} src={c.img} onClick={() => setImgPreview(c.img)} />
                 </div>
               ))}
             </div>
@@ -474,19 +475,11 @@ const handleViewAIDraft = async () => {
                 {product.review_history.map((record, idx) => (
                   <div key={idx} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-sm font-medium text-gray-700">
-                        第 {idx + 1} 次退回
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {formatTime(record.time)}
-                      </span>
+                      <span className="text-sm font-medium text-gray-700">第 {idx + 1} 次退回</span>
+                      <span className="text-xs text-gray-500">{formatTime(record.time)}</span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-1">
-                      审核人：{record.reviewer || '管理员'}
-                    </p>
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                      {record.note}
-                    </p>
+                    <p className="text-sm text-gray-600 mb-1">审核人：{record.reviewer || '管理员'}</p>
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{record.note}</p>
                   </div>
                 ))}
               </div>
@@ -502,10 +495,7 @@ const handleViewAIDraft = async () => {
           >
             <div className="max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-end mb-2">
-                <button
-                  className="text-white/80 hover:text-white"
-                  onClick={() => setImgPreview(null)}
-                >
+                <button className="text-white/80 hover:text-white" onClick={() => setImgPreview(null)}>
                   <X size={26} />
                 </button>
               </div>
@@ -513,6 +503,15 @@ const handleViewAIDraft = async () => {
             </div>
           </div>
         ) : null}
+
+        {/* ✅ 渲染 AI 草稿弹窗（放在 return 最后，最稳） */}
+        {draftModalOpen && activeDraft && (
+          <DraftReviewModal
+            draft={activeDraft}
+            mode="view"
+            onClose={() => setDraftModalOpen(false)}
+          />
+        )}
       </div>
     </div>
   )
