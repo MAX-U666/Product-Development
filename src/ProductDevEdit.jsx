@@ -1,4 +1,4 @@
-// File: src/ProductDevEdit.jsx
+// File: src/ProductDevEdit.jsx*
 // 产品开发编辑页面（stage=1）
 // 功能：编辑文案字段 + 上传瓶型和参考图 + 提交【开发素材复审】（交给管理员复审）
 // ✅ 本次修改点（在你原代码基础上改，不删结构）：
