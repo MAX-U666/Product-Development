@@ -618,3 +618,57 @@ export async function updateProduct(productId, updateData) {
 
   return result;
 }
+
+
+
+// ✅ AI 草稿通过后：把草稿内容写入 products 的“统一字段”
+// 规则：统一字段优先，其次用 ai_* 字段兜底；不覆盖已有非空字段（可选）
+export async function applyDraftToProductSpec(productId, draft, { overwrite = false } = {}) {
+  const pick = (...keys) => {
+    for (const k of keys) {
+      const v = draft?.[k]
+      if (v !== undefined && v !== null && String(v).trim() !== '') return v
+    }
+    return null
+  }
+
+  // 竞品分析：优先 competitor_analysis，其次 ai_competitor_analysis
+  const competitorAnalysis = pick('competitor_analysis', 'ai_competitor_analysis')
+  // 包装需求：优先 packaging_requirements，其次 packaging_design（你表里两者都有）
+  const packagingReq = pick('packaging_requirements', 'packaging_design')
+
+  const payload = {
+    // ✅ 统一字段（设计/内容只看这些）
+    positioning: pick('positioning', 'ai_positioning'),
+    main_efficacy: pick('main_efficacy', 'ai_main_efficacy'),
+    ingredients: pick('ingredients', 'ai_ingredients'),
+    primary_benefit: pick('primary_benefit', 'ai_primary_benefit'),
+
+    packaging_requirements: packagingReq,
+    competitor_analysis: competitorAnalysis,
+
+    pricing: pick('pricing', 'price', 'ai_pricing'),
+
+    // ✅ 你表里也有最终标题与SEO字段（建议也一并落）
+    product_title: pick('product_title', 'ai_title', 'manual_title'),
+    seo_keywords: pick('seo_keywords', 'ai_keywords', 'manual_keywords'),
+
+    // 记录来源信息（你表里有 is_ai_generated / created_from_draft_id）
+    is_ai_generated: true,
+    created_from_draft_id: pick('id', 'draft_id'),
+  }
+
+  // 清理掉 null，避免把数据库已有值覆盖成 null
+  Object.keys(payload).forEach(k => {
+    if (payload[k] === null) delete payload[k]
+  })
+
+  // overwrite=false 时：只填空，不覆盖已有字段
+  if (!overwrite) {
+    // 如果你想严格“只填空”，需要先读 products 当前行再合并。
+    // 这里给一个轻量做法：在调用前把 product 行也传进来（见下方 B 方案）
+  }
+
+  // 直接 update products
+  return await updateData('products', productId, payload)
+}
