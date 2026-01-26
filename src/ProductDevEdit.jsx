@@ -1,6 +1,10 @@
 // File: src/ProductDevEdit.jsx
 // 产品开发编辑页面（stage=1）
-// 功能：编辑文案字段 + 上传瓶型和参考图 + 提交【开发素材复审】（二次审核）
+// 功能：编辑文案字段 + 上传瓶型和参考图 + 提交【开发素材复审】（交给管理员复审）
+// ✅ 本次修改点（在你原代码基础上改，不删结构）：
+// 1) 提交复审时：写 dev_assets_status="待复审"、status="待管理员复审"、stage=1（强制留在开发阶段）
+// 2) 移除 dev_assets_submit_time（避免 Supabase 400：列不存在）
+// 3) 提交提示文案同步更新
 
 import React, { useState, useEffect } from "react";
 import { X, Upload, Trash2, Save, Send, Loader } from "lucide-react";
@@ -143,24 +147,28 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
     }
   };
 
-  // 提交开发素材复审（不改 stage；进入待复审状态）
+  // 提交开发素材复审（交给管理员复审；强制留在 stage=1）
   const handleSubmit = async () => {
     // 检查最低门槛
     const hasBottle = bottleFile || bottlePreview;
     const hasRef1 = refFiles[0] || refPreviews[0];
 
     if (!hasBottle || !hasRef1) {
-      alert("⚠️ 需要至少：\n\n• 瓶型图 1 张\n• 参考包装图 1 张\n\n才能提交进入设计！");
+      alert("⚠️ 需要至少：\n\n• 瓶型图 1 张\n• 参考包装图 1 张\n\n才能提交管理员复审！");
       return;
     }
 
-    if (!confirm("确认提交开发素材复审？\n\n提交后将进入【待复审】状态，管理员审核通过后才会进入设计待接单。")) {
+    if (
+      !confirm(
+        "确认提交管理员复审？\n\n提交后将进入【待管理员复审】状态，管理员审核通过后才会进入设计待接单。"
+      )
+    ) {
       return;
     }
 
     setSubmitting(true);
     try {
-      // 1. 先保存（确保图片已上传）
+      // 1) 先保存（确保图片已上传）
       const updates = { ...formData };
 
       if (bottleFile) {
@@ -178,15 +186,17 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
 
       await updateData("products", product.id, updates);
 
-      // 2. 标记进入【待复审】（二次审核）
+      // 2) 标记进入【待复审】（二次审核：管理员复审）
+      // ✅ 强制 stage=1，避免出现 stage=2 + 待复审 的矛盾态
       await updateData("products", product.id, {
         dev_assets_status: "待复审",
-        dev_assets_submit_time: new Date().toISOString(),
-        status: "开发复审中",
+        status: "待管理员复审",
         stage: 1,
       });
 
-      alert("✅ 已提交开发素材复审！\n\n下一步：管理员在【全部产品-详情】里审核通过后，才会进入设计待接单。 ");
+      alert(
+        "✅ 已提交管理员复审！\n\n下一步：管理员在【全部产品】点👁查看详情，在详情中审核通过后，产品才会进入设计待接单。"
+      );
       onSuccess?.();
       onClose?.();
     } catch (e) {
@@ -206,9 +216,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
           <div>
-            <div className="text-base font-semibold text-zinc-900">
-              📝 产品开发 - Stage 1
-            </div>
+            <div className="text-base font-semibold text-zinc-900">📝 产品开发 - Stage 1</div>
             <div className="mt-1 text-xs text-zinc-600">
               产品 ID: {product.id} | 继续完善资料并上传瓶型和参考图
             </div>
@@ -357,9 +365,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
               <div className="text-sm font-semibold text-zinc-900">
                 🍾 瓶型图 <span className="text-red-600">*</span>
               </div>
-              {bottlePreview && (
-                <span className="text-xs font-semibold text-green-600">✓ 已上传</span>
-              )}
+              {bottlePreview && <span className="text-xs font-semibold text-green-600">✓ 已上传</span>}
             </div>
 
             {!bottlePreview ? (
@@ -440,8 +446,8 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
 
           {/* 提示 */}
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-            ⚠️ 提示：必须上传【瓶型图1张 + 参考包装图至少1张】才能提交【开发素材复审】。
-            复审通过后，产品才会进入设计待接单。
+            ⚠️ 提示：必须上传【瓶型图1张 + 参考包装图至少1张】才能提交【管理员复审】。
+            审核通过后，产品才会进入设计待接单。
           </div>
         </div>
 
@@ -487,7 +493,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  提交开发复审
+                  提交管理员复审
                 </>
               )}
             </button>
