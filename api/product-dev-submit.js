@@ -1,13 +1,13 @@
 /**
  * /api/product-dev-submit
  *
- * POST: 产品开发资料达到最低门槛后，提交进入 stage=2（待接单）
+ * POST: 产品开发资料达到最低门槛后，提交进入 stage=1（待管理员复审）
  * 
  * 最低门槛：
  * - bottle_img: 瓶型图 1 张（必须）
  * - ref_packaging_url_1: 参考包装图 1 张（必须）
  * 
- * 成功后：stage=2, status='待接单'
+ * 成功后：stage=1, dev_assets_status='待复审', status='待管理员复审'。管理员审核通过后进入 stage=2（待接单）
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -74,12 +74,13 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3. 推进到 stage=2（待接单）
+    // 3. 标记进入【待复审】（管理员复审）：stage=1
     const { data, error: updateError } = await supabase
       .from("products")
       .update({
-        stage: 2,
-        status: "待接单",
+        stage: 1,
+        dev_assets_status: "待复审",
+        status: "待管理员复审",
         develop_submit_time: new Date().toISOString(),
       })
       .eq("id", body.product_id)
@@ -96,7 +97,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ 
       success: true, 
       data: data?.[0] || null,
-      message: "产品已成功提交进入设计阶段"
+      message: "产品已成功提交管理员复审"
     });
 
   } catch (e) {
