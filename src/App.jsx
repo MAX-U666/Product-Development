@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles, ChevronDown } from 'lucide-react'
-import { fetchData, deleteData, fetchAIDrafts } from './api'
+import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import ProductForm from './ProductForm'
@@ -18,6 +18,7 @@ import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
 import AIDraftDashboard from './AIDraftDashboard'
 import ProductDevEdit from './ProductDevEdit'
+import DraftReviewModal from './DraftReviewModal'
 
 // ✅ 用户管理页（你需要新建 src/UserManagement.jsx）
 import UserManagement from './UserManagement'
@@ -34,6 +35,11 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
+
+  // ✅ 全部产品页：点👁快速预览（AI草稿 + 开发素材）
+  const [quickPreviewOpen, setQuickPreviewOpen] = useState(false)
+  const [quickPreviewDraft, setQuickPreviewDraft] = useState(null)
+  const [quickPreviewProduct, setQuickPreviewProduct] = useState(null)
 
   // ✅ 管理员下拉菜单
   const [showAdminMenu, setShowAdminMenu] = useState(false)
@@ -141,6 +147,34 @@ export default function App() {
       alert('删除失败：请查看控制台错误')
     }
   }
+
+  // ✅ 全部产品页：点👁直接预览 AI 草稿 + 开发上传素材（瓶型/参考包装）
+  async function openQuickPreview(product) {
+    const draftId = product?.created_from_draft_id
+
+    // 没有草稿ID：保持原逻辑 -> 打开产品详情
+    if (!draftId) {
+      setSelectedProduct(product)
+      return
+    }
+
+    try {
+      const d = await fetchAIDraftById(draftId)
+      if (!d) {
+        alert('未找到 AI 草稿，将打开产品详情')
+        setSelectedProduct(product)
+        return
+      }
+
+      setQuickPreviewProduct(product)
+      setQuickPreviewDraft(d)
+      setQuickPreviewOpen(true)
+    } catch (e) {
+      alert('读取 AI 草稿失败：' + (e?.message || e))
+      setSelectedProduct(product)
+    }
+  }
+
 
   async function handleAICreateSuccess() {
     await loadData()
@@ -433,7 +467,7 @@ export default function App() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <button
-                                onClick={() => setSelectedProduct(product)}
+                                onClick={() => openQuickPreview(product)}
                                 className="text-blue-600 hover:text-blue-800 transition-colors"
                                 title="查看详情"
                               >
@@ -529,6 +563,21 @@ export default function App() {
           }}
         />
       )}
+
+      {/* ✅ 快速预览：AI草稿 + 开发素材（瓶型/参考包装） */}
+      {quickPreviewOpen && quickPreviewDraft && (
+        <DraftReviewModal
+          draft={quickPreviewDraft}
+          product={quickPreviewProduct}
+          mode="view"
+          onClose={() => {
+            setQuickPreviewOpen(false)
+            setQuickPreviewDraft(null)
+            setQuickPreviewProduct(null)
+          }}
+        />
+      )}
+
     </div>
   )
 }
