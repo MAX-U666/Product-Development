@@ -5,6 +5,26 @@ import { formatTime, getCurrentBeijingISO } from './timeConfig'
 
 import DraftReviewModal from './DraftReviewModal'
 
+function normalizeImageList(maybe) {
+  if (!maybe) return []
+  if (Array.isArray(maybe)) return maybe.filter(Boolean)
+  if (typeof maybe === 'string') {
+    const s = maybe.trim()
+    if (!s) return []
+    if (s.startsWith('[')) {
+      try {
+        const arr = JSON.parse(s)
+        if (Array.isArray(arr)) return arr.filter(Boolean)
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (s.includes(',')) return s.split(',').map((x) => x.trim()).filter(Boolean)
+    return [s]
+  }
+  return []
+}
+
 function safeOpen(url) {
   if (!url) return
   const u = url.trim()
@@ -50,6 +70,10 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
   // ✅ 新增：审核相关状态
   const [isReviewing, setIsReviewing] = useState(false)
   const [reviewNote, setReviewNote] = useState('')
+
+  // ✅ 新增：开发素材复审（二次审核）
+  const [isDevReviewing, setIsDevReviewing] = useState(false)
+  const [devReviewNote, setDevReviewNote] = useState('')
 
   useEffect(() => {
     setBottle(bottleProp || null)
@@ -200,14 +224,111 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
     }
   }
 
+  // =========================
+  // ✅ 二次审核：开发上传的瓶型图 + 参考包装图
+  // 目标：审核通过 -> stage=2（待接单，设计师可接单）
+  // =========================
+  const handleDevAssetsApprove = async () => {
+    if (!confirm('确定【通过开发素材复审】吗？通过后将进入【设计待接单】。')) return
+
+    setIsDevReviewing(true)
+    try {
+      await updateData('products', product.id, {
+        dev_assets_status: '已通过',
+        dev_assets_review_note: (devReviewNote || '开发素材审核通过').trim(),
+        dev_assets_reviewed_at: getCurrentBeijingISO(),
+        stage: 2,
+        status: '待接单'
+      })
+
+      alert('✅ 开发素材审核通过！已进入设计待接单')
+      setDevReviewNote('')
+      onUpdate?.()
+      onClose(false)
+    } catch (error) {
+      alert('审核失败：' + (error?.message || '未知错误'))
+    } finally {
+      setIsDevReviewing(false)
+    }
+  }
+
+  const handleDevAssetsReject = async () => {
+    if (!devReviewNote.trim()) {
+      alert('请填写退回原因（必填）')
+      return
+    }
+    if (!confirm('确定【退回开发补充】吗？开发需要按意见补图后重新提交复审。')) return
+
+    setIsDevReviewing(true)
+    try {
+      // 记录历史（复用 review_history，避免新建表）
+      const currentHistory = Array.isArray(product.review_history) ? product.review_history : []
+      const newHistory = [
+        ...currentHistory,
+        {
+          time: getCurrentBeijingISO(),
+          note: `[开发素材退回] ${devReviewNote}`,
+          reviewer: currentUser?.name || '管理员'
+        }
+      ]
+
+      await updateData('products', product.id, {
+        dev_assets_status: '已拒绝',
+        dev_assets_review_note: devReviewNote.trim(),
+        dev_assets_reviewed_at: getCurrentBeijingISO(),
+        review_history: newHistory,
+        stage: 1,
+        status: '开发补充中'
+      })
+
+      alert('✅ 已退回开发补充！')
+      setDevReviewNote('')
+      onUpdate?.()
+      onClose(false)
+    } catch (error) {
+      alert('退回失败：' + (error?.message || '未知错误'))
+    } finally {
+      setIsDevReviewing(false)
+    }
+  }
+
   if (!product) return null
 
   // ✅ 判断是否显示审核区域
   const showReviewSection =
     currentUser?.role === '管理员' && product.stage === 3 && product.package_review_status === 'pending'
 
+  // ✅ 二次审核：开发素材复审（Stage 1，开发已提交待复审）
+  const showDevAssetsReviewSection =
+    currentUser?.role === '管理员' && product.stage === 1 && product.dev_assets_status === '待复审'
+
   // 找到设计师信息
   const designer = users.find((u) => u.id === product.package_designer_id)
+
+  // 开发素材（用于预览：兼容多命名 + 兼容 ref_packaging_url_1/2/3）
+  const bottleImg =
+    product?.bottle_img ||
+    product?.bottle_image_url ||
+    product?.bottle_img_url ||
+    product?.bottle_img_url_1 ||
+    product?.bottle_img_1 ||
+    product?.bottle_url ||
+    product?.bottleImage ||
+    product?.bottle_image ||
+    null
+
+  const refImgsFromSlots = [product?.ref_packaging_url_1, product?.ref_packaging_url_2, product?.ref_packaging_url_3].filter(Boolean)
+  const refImgs =
+    refImgsFromSlots.length > 0
+      ? refImgsFromSlots
+      : normalizeImageList(
+          product?.ref_packaging_images ||
+            product?.ref_design_imgs ||
+            product?.ref_design_img ||
+            product?.ref_packaging ||
+            product?.ref_packaging_urls ||
+            product?.ref_packaging_imgs
+        )
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -262,6 +383,63 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
 
         {/* Body */}
         <div className="p-6 space-y-6">
+          {/* ✅ 二次审核：开发素材复审（Stage 1） */}
+          {showDevAssetsReviewSection && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-blue-800 mb-4 flex items-center gap-2">🧪 待复审 - 开发素材（瓶型图 / 参考包装）</h3>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">瓶型图</p>
+                  <ImgCard title="瓶型图" src={bottleImg} onClick={() => setImgPreview(bottleImg)} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">参考包装图</p>
+                  {refImgs.length === 0 ? (
+                    <div className="text-sm text-gray-500">暂无参考包装图</div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {refImgs.map((u, idx) => (
+                        <ImgCard key={idx} title={`参考图 ${idx + 1}`} src={u} onClick={() => setImgPreview(u)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">审核意见（退回时必填）：</label>
+                <textarea
+                  value={devReviewNote}
+                  onChange={(e) => setDevReviewNote(e.target.value)}
+                  placeholder="例如：瓶型图需要换成透明背景；参考图至少补一张正面；尺寸比例不对..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  rows="3"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDevAssetsApprove}
+                  disabled={isDevReviewing}
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 font-medium"
+                >
+                  <CheckCircle size={20} />
+                  {isDevReviewing ? '处理中...' : '通过复审 → 进入设计待接单'}
+                </button>
+
+                <button
+                  onClick={handleDevAssetsReject}
+                  disabled={isDevReviewing || !devReviewNote.trim()}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 font-medium"
+                >
+                  <XCircle size={20} />
+                  {isDevReviewing ? '处理中...' : '退回开发补充'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ✅ 新增：审核区域（仅管理员且产品在待审核状态） */}
           {showReviewSection && (
             <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-6">
