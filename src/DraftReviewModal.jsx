@@ -6,7 +6,7 @@ import FieldRow from "./ProductFormAI/components/FieldRow";
 import { createProductFromDraft, updateDraftStatus } from "./api";
 import { getCurrentBeijingISO } from "./timeConfig";
 
-export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "review" }) {
+export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "review" }) {
   const [formData, setFormData] = useState({
     positioning: "",
     sellingPoint: "",
@@ -25,6 +25,9 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
   const [showCompetitors, setShowCompetitors] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // ✅ view 模式：仅查看，不允许审核/创建
+  const isViewOnly = mode === "view";
+
   // 初始化表单数据
   useEffect(() => {
     if (draft) {
@@ -41,10 +44,17 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
         keywords: draft.keywords || "",
         packaging: draft.packaging_requirements || "",
       });
+
+      // ✅ 切换不同草稿时，审核意见清空（避免串草稿）
+      setReviewComment("");
+      setShowCompetitors(false);
     }
   }, [draft]);
 
   const handleApprove = async () => {
+    // ✅ view-only 下禁用（保险）
+    if (isViewOnly) return;
+
     if (!reviewComment.trim()) {
       alert("请填写审核意见");
       return;
@@ -80,11 +90,11 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
         created_at: getCurrentBeijingISO(),
       };
 
-      console.log('准备创建产品，数据：', productData);
-      
+      console.log("准备创建产品，数据：", productData);
+
       const createResult = await createProductFromDraft(productData);
-      
-      console.log('API 返回结果：', createResult);
+
+      console.log("API 返回结果：", createResult);
 
       if (!createResult?.success || !createResult?.product_id) {
         throw new Error(createResult?.message || "创建产品失败");
@@ -93,7 +103,7 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
       const productId = createResult.product_id;
 
       // 2. 更新草稿状态（适配原有 API）
-      await updateDraftStatus(draft.id, 'approve', reviewComment, draft.created_by);
+      await updateDraftStatus(draft.id, "approve", reviewComment, draft.created_by);
 
       alert(`✅ 产品已创建成功！\n\n产品 ID: ${productId}`);
       onSuccess?.();
@@ -106,6 +116,9 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
   };
 
   const handleReject = async () => {
+    // ✅ view-only 下禁用（保险）
+    if (isViewOnly) return;
+
     if (!reviewComment.trim()) {
       alert("拒绝时必须填写审核意见");
       return;
@@ -116,7 +129,7 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
     setSubmitting(true);
     try {
       // 适配原有 API
-      await updateDraftStatus(draft.id, 'reject', reviewComment, draft.created_by);
+      await updateDraftStatus(draft.id, "reject", reviewComment, draft.created_by);
 
       alert("✅ 已拒绝该草稿");
       onSuccess?.();
@@ -133,22 +146,21 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
   const aiExplain = draft.ai_explanations || {};
   const competitors = draft.competitors_data || [];
 
+  const modalTitle = isViewOnly ? "查看 AI 草稿" : "审核 AI 草稿";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm">
       <div className="relative w-full max-w-5xl overflow-hidden rounded-3xl bg-zinc-50 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-4">
           <div>
-            <div className="text-base font-semibold text-zinc-900">审核 AI 草稿</div>
+            <div className="text-base font-semibold text-zinc-900">{modalTitle}</div>
             <div className="mt-1 text-xs text-zinc-500">
               ID: {draft.id} | 创建时间: {new Date(draft.created_at).toLocaleString("zh-CN")}
+              {isViewOnly ? " | 只读模式" : ""}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100"
-            aria-label="Close"
-          >
+          <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -354,46 +366,48 @@ export default function DraftReviewModal({ draft, onClose, onSuccess ,mode = "re
               </div>
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
                 <div className="text-xs text-zinc-500">预估成本</div>
-                <div className="font-semibold text-zinc-900">
-                  ${(draft.estimated_cost || 0).toFixed(4)}
-                </div>
+                <div className="font-semibold text-zinc-900">${(draft.estimated_cost || 0).toFixed(4)}</div>
               </div>
             </div>
           </div>
 
-          {/* 审核意见 */}
-          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
-            <div className="text-sm font-semibold text-zinc-900">审核意见 *</div>
-            <textarea
-              className="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-              rows={3}
-              placeholder="请填写审核意见（必填）"
-              value={reviewComment}
-              onChange={(e) => setReviewComment(e.target.value)}
-            />
+          {/* ✅ 审核意见（仅 review 显示） */}
+          {!isViewOnly && (
+            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="text-sm font-semibold text-zinc-900">审核意见 *</div>
+              <textarea
+                className="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
+                rows={3}
+                placeholder="请填写审核意见（必填）"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ✅ Footer（仅 review 显示） */}
+        {!isViewOnly && (
+          <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-5 py-4">
+            <button
+              onClick={handleReject}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <XCircle className="h-4 w-4" />
+              拒绝
+            </button>
+
+            <button
+              onClick={handleApprove}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <CheckCircle className="h-4 w-4" />
+              {submitting ? "处理中..." : "✅ 通过并创建产品"}
+            </button>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-5 py-4">
-          <button
-            onClick={handleReject}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-          >
-            <XCircle className="h-4 w-4" />
-            拒绝
-          </button>
-
-          <button
-            onClick={handleApprove}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-          >
-            <CheckCircle className="h-4 w-4" />
-            {submitting ? "处理中..." : "✅ 通过并创建产品"}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
