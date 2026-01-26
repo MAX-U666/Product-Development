@@ -2,6 +2,32 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { X, Upload, Image as ImageIcon, Download, FileUp } from 'lucide-react'
 import { insertData, fetchData } from './api'
 import { getCurrentBeijingISO } from './timeConfig'
+// 修改产品创建状态：传统创建产品和AI创建产品状态分开
+const handleCreateProduct = async (isAI = false) => {
+  const productData = {
+    name: productName,
+    description: productDescription,
+    category: productCategory,
+    // 其他产品信息
+    stage: isAI ? 'AI_draft_created' : 'product_created', // AI流程和传统流程的stage值不同
+    status: isAI ? '待审核' : '待审核', // 初始状态，待审核
+    dev_assets_status: isAI ? '待复审' : '待审核', // AI流程不直接上传设计
+    ai_generated: isAI, // 用来标记是否是AI创建
+  };
+
+  try {
+    const response = await api.createProduct(productData);
+    if (response.success) {
+      alert('产品创建成功！');
+    } else {
+      alert('产品创建失败，请重试。');
+    }
+  } catch (error) {
+    console.error('创建产品出错', error);
+  }
+};
+
+
 
 // ⚠️ 说明：你现在 api.js 里 SUPABASE_URL / SUPABASE_KEY 没有导出
 // 为了让 ProductForm "单文件可用"，这里复制一份（跟 api.js 保持一致）
