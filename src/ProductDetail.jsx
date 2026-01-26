@@ -508,6 +508,7 @@ export default function ProductDetail({ product, bottle: bottleProp, users = [],
         {draftModalOpen && activeDraft && (
           <DraftReviewModal
             draft={activeDraft}
+            product={product}
             mode="view"
             onClose={() => setDraftModalOpen(false)}
           />
