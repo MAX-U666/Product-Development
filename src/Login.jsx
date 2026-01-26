@@ -126,13 +126,8 @@ export default function Login({ onLogin }) {
         </div>
 
         <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-600 mb-2">测试账号：</p>
-          <div className="text-xs text-gray-500 space-y-1">
-            <p>✨ 管理员: admin / 123456</p>
-            <p>🔧 开发人员: dev1 / 123456</p>
-            <p>🎨 设计师: designer1 / 123456</p>
-            <p>💼 业务人员: business1 / 123456</p>
-          </div>
+    
+  
           <p className="text-xs text-gray-400 mt-2">
             数据库已加载 {users.length} 个用户
           </p>
