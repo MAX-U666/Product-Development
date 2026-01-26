@@ -1,703 +1,635 @@
-// File: src/ProductDetail.jsx
-// ✅ 完整版本 - 2026-01-26
-// 传统创建产品审核页面 - 完整展示所有创建时填写的字段
+// File: src/App.jsx
+// ✅ 主应用入口 - 2026-01-26 修复版
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
-  X,
-  CheckCircle,
-  XCircle,
-  ExternalLink,
-  Eye,
-  Calendar,
-  Tag,
-  Globe,
-  ShoppingBag,
-  Droplet,
   Package,
-  DollarSign,
-  Sparkles,
-  FileText,
-  Link as LinkIcon,
-  Image as ImageIcon,
-  Clock,
-  User,
+  LayoutDashboard,
+  Plus,
+  Users,
+  Settings,
+  LogOut,
   Palette,
-  Beaker,
+  FileText,
+  Bot,
+  Eye,
+  ChevronDown,
+  Menu,
+  X,
 } from "lucide-react";
-import { updateData, fetchBottleById } from "./api";
-import { getCurrentBeijingISO, formatTime } from "./timeConfig";
 
-// ========== 工具函数 ==========
-function safeOpen(url) {
-  if (!url) return;
-  const u = String(url).trim();
-  if (!u) return;
-  if (!/^https?:\/\//i.test(u)) {
-    window.open("https://" + u, "_blank", "noopener,noreferrer");
-    return;
-  }
-  window.open(u, "_blank", "noopener,noreferrer");
-}
+// 组件导入
+import Login from "./Login";
+import Dashboard from "./Dashboard";
+import ProductForm from "./ProductForm";
+import ProductFormAI from "./ProductFormAI";
+import ProductDetail from "./ProductDetail";
+import ProductDevEdit from "./ProductDevEdit";
+import AIDraftDashboard from "./AIDraftDashboard";
+import DraftReviewModal from "./DraftReviewModal";
+import DesignerDashboard from "./DesignerDashboard";
+import ContentDashboard from "./ContentDashboard";
+import UserManagement from "./UserManagement";
 
-function normalizeImageList(maybe) {
-  if (!maybe) return [];
-  if (Array.isArray(maybe)) return maybe.filter(Boolean);
-  if (typeof maybe === "string") {
-    const s = maybe.trim();
-    if (!s) return [];
-    if (s.startsWith("[")) {
-      try {
-        const arr = JSON.parse(s);
-        if (Array.isArray(arr)) return arr.filter(Boolean);
-      } catch (e) {}
-    }
-    if (s.includes(",")) return s.split(",").map((x) => x.trim()).filter(Boolean);
-    return [s];
-  }
-  return [];
-}
+// API
+import { fetchData, fetchAIDraftById } from "./api";
 
-// ========== 子组件 ==========
-function FieldItem({ label, value, fullWidth = false }) {
-  return (
-    <div className={fullWidth ? "col-span-2" : ""}>
-      <div className="text-xs text-zinc-500 mb-1">{label}</div>
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 min-h-[44px]">
-        {value || <span className="text-zinc-400">-</span>}
-      </div>
-    </div>
-  );
-}
+// ==================== 主应用组件 ====================
+export default function App() {
+  // 用户状态
+  const [currentUser, setCurrentUser] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-function ImgTile({ title, src, size = "normal" }) {
-  const heightClass = size === "large" ? "h-[280px]" : size === "small" ? "h-[120px]" : "h-[160px]";
-  
-  if (!src) {
-    return (
-      <div className={`rounded-xl border border-dashed border-zinc-200 bg-zinc-50 text-sm text-zinc-400 flex items-center justify-center ${heightClass}`}>
-        <div className="text-center">
-          <ImageIcon className="h-6 w-6 mx-auto mb-1 opacity-40" />
-          <span className="text-xs">暂无图片</span>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-50 border-b border-zinc-100">
-        <div className="text-xs font-medium text-zinc-700">{title}</div>
-        <button
-          type="button"
-          onClick={() => safeOpen(src)}
-          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-        >
-          打开 <ExternalLink className="h-3 w-3" />
-        </button>
-      </div>
-      <button type="button" className="w-full" onClick={() => safeOpen(src)}>
-        <img
-          src={src}
-          alt={title}
-          className={`w-full ${heightClass} object-contain bg-white`}
-        />
-      </button>
-    </div>
-  );
-}
+  // 数据状态
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
-function SectionCard({ icon: Icon, title, badge = null, highlight = false, children }) {
-  return (
-    <div className={`rounded-2xl border p-5 ${
-      highlight ? "border-blue-300 bg-blue-50" : "border-zinc-200 bg-white"
-    }`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
-          {Icon && <Icon className="h-4 w-4 text-zinc-600" />}
-          <span>{title}</span>
-        </div>
-        {badge}
-      </div>
-      {children}
-    </div>
-  );
-}
+  // UI 状态
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showProductFormAI, setShowProductFormAI] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-// ========== 主组件 ==========
-export default function ProductDetail({
-  product,
-  onClose,
-  onRefresh,
-  currentUser = null,
-  onOpenDraftPreview = null,
-}) {
-  const [reviewComment, setReviewComment] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [bottleImgUrl, setBottleImgUrl] = useState(null);
+  // AI 草稿预览
+  const [draftPreviewProduct, setDraftPreviewProduct] = useState(null);
+  const [draftPreviewData, setDraftPreviewData] = useState(null);
+  const [draftPreviewLoading, setDraftPreviewLoading] = useState(false);
 
-  // 查询瓶型图（如果只有 bottle_id 没有 bottle_img）
+  // 检查登录状态
   useEffect(() => {
-    async function fetchBottleImg() {
-      console.log("🍾 瓶型图查询 - bottle_img:", product?.bottle_img);
-      console.log("🍾 瓶型图查询 - bottle_id:", product?.bottle_id);
-      
-      // 如果已有 bottle_img，直接用
-      if (product?.bottle_img) {
-        console.log("🍾 使用 bottle_img:", product.bottle_img);
-        setBottleImgUrl(product.bottle_img);
-        return;
-      }
-      // 如果有 bottle_id，查询 bottles 表
-      if (product?.bottle_id) {
-        try {
-          console.log("🍾 查询 bottles 表, id:", product.bottle_id);
-          const bottle = await fetchBottleById(product.bottle_id);
-          console.log("🍾 查询结果:", bottle);
-          
-          if (bottle?.img_url) {
-            setBottleImgUrl(bottle.img_url);
-          }
-        } catch (e) {
-          console.error("🍾 查询瓶型图失败:", e);
-        }
+    const saved = localStorage.getItem("currentUser");
+    if (saved) {
+      try {
+        const user = JSON.parse(saved);
+        setCurrentUser(user);
+      } catch (e) {
+        localStorage.removeItem("currentUser");
       }
     }
-    fetchBottleImg();
-  }, [product?.bottle_img, product?.bottle_id]);
+    setCheckingAuth(false);
+  }, []);
 
-  if (!product) return null;
-
-  // ========== 数据解析 ==========
-  // 瓶型图 - 使用 state 中查询到的 URL
-  const bottleImg = bottleImgUrl;
-
-  // 参考包装图 - 数据库字段: ref_design_img (单张) 或 ref_packaging_url_1/2/3 (多张)
-  const refImgsFromSlots = [
-    product.ref_packaging_url_1,
-    product.ref_packaging_url_2,
-    product.ref_packaging_url_3,
-  ].filter(Boolean);
-
-  // 如果没有分开的字段，尝试用 ref_design_img
-  const refImgs =
-    refImgsFromSlots.length > 0
-      ? refImgsFromSlots
-      : product.ref_design_img 
-        ? [product.ref_design_img] 
-        : [];
-
-  // 包装设计稿
-  const packageDesignUrl = product.package_design_url;
-
-  // 竞品数据（3组链接+图片）- 数据库字段: competitor_1_url, competitor_1_img
-  const competitors = [
-    { 
-      link: product.competitor_1_url, 
-      img: product.competitor_1_img 
-    },
-    { 
-      link: product.competitor_2_url, 
-      img: product.competitor_2_img 
-    },
-    { 
-      link: product.competitor_3_url, 
-      img: product.competitor_3_img 
-    },
-  ];
-
-  // ========== 审核状态判断 ==========
-  const isDevAssetsReview = product.stage === 1 && 
-    (product.dev_assets_status === "待复审" || product.status === "待管理员复审" || product.status === "待审核");
-  
-  const isPackageReview = product.stage === 3 && product.package_review_status === "pending";
-  
-  const needsReview = isDevAssetsReview || isPackageReview;
-
-  // ========== 审核操作 ==========
-  const handleDevAssetsApprove = async () => {
-    if (!confirm("确定【通过开发素材复审】吗？\n\n通过后将进入【设计待接单】阶段。")) return;
-
-    setSubmitting(true);
+  // 加载产品数据
+  const loadProducts = async () => {
+    setLoadingProducts(true);
     try {
-      await updateData("products", product.id, {
-        dev_assets_status: "已通过",
-        dev_assets_review_note: (reviewComment || "开发素材审核通过").trim(),
-        dev_assets_reviewed_at: getCurrentBeijingISO(),
-        stage: 2,
-        status: "待接单",
-      });
-
-      alert("✅ 开发素材审核通过！\n\n产品已进入【设计待接单】阶段。");
-      onRefresh?.();
-      onClose?.();
+      const data = await fetchData("products", { orderBy: "created_at.desc" });
+      setProducts(data || []);
     } catch (e) {
-      alert("审核失败：" + (e?.message || "未知错误"));
+      console.error("加载产品失败:", e);
     } finally {
-      setSubmitting(false);
+      setLoadingProducts(false);
     }
   };
 
-  const handleDevAssetsReject = async () => {
-    if (!reviewComment.trim()) {
-      alert("请填写退回原因（必填）");
+  useEffect(() => {
+    if (currentUser) {
+      loadProducts();
+    }
+  }, [currentUser]);
+
+  // 登录处理
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem("currentUser", JSON.stringify(user));
+  };
+
+  // 登出处理
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem("currentUser");
+    setActiveTab("dashboard");
+  };
+
+  // 打开 AI 草稿预览
+  const openDraftPreview = async (product) => {
+    if (!product?.created_from_draft_id) {
+      alert("该产品未关联 AI 草稿");
       return;
     }
-    if (!confirm("确定【退回开发补充】吗？")) return;
 
-    setSubmitting(true);
+    setDraftPreviewLoading(true);
+    setDraftPreviewProduct(product);
+
     try {
-      const currentHistory = Array.isArray(product.review_history) ? product.review_history : [];
-      const newHistory = [
-        ...currentHistory,
-        {
-          time: getCurrentBeijingISO(),
-          note: `[开发素材退回] ${reviewComment}`,
-          reviewer: currentUser?.name || "管理员",
-        },
-      ];
-
-      await updateData("products", product.id, {
-        dev_assets_status: "已拒绝",
-        dev_assets_review_note: reviewComment.trim(),
-        dev_assets_reviewed_at: getCurrentBeijingISO(),
-        review_history: newHistory,
-        stage: 1,
-        status: "开发补充中",
-      });
-
-      alert("✅ 已退回开发补充！");
-      onRefresh?.();
-      onClose?.();
+      const draft = await fetchAIDraftById(product.created_from_draft_id);
+      if (draft) {
+        setDraftPreviewData(draft);
+      } else {
+        alert("未找到关联的 AI 草稿");
+        setDraftPreviewProduct(null);
+      }
     } catch (e) {
-      alert("退回失败：" + (e?.message || "未知错误"));
+      alert("加载草稿失败: " + (e?.message || "未知错误"));
+      setDraftPreviewProduct(null);
     } finally {
-      setSubmitting(false);
+      setDraftPreviewLoading(false);
     }
   };
 
-  const handlePackageApprove = async () => {
-    if (!confirm("确定【通过包装设计审核】吗？\n\n通过后将进入【内容策划】阶段。")) return;
-
-    setSubmitting(true);
-    try {
-      await updateData("products", product.id, {
-        package_review_status: "approved",
-        package_review_note: (reviewComment || "包装设计审核通过").trim(),
-        package_review_time: getCurrentBeijingISO(),
-        stage: 4,
-        status: "待内容策划",
-      });
-
-      alert("✅ 包装设计审核通过！");
-      onRefresh?.();
-      onClose?.();
-    } catch (e) {
-      alert("审核失败：" + (e?.message || "未知错误"));
-    } finally {
-      setSubmitting(false);
-    }
+  // 关闭草稿预览
+  const closeDraftPreview = () => {
+    setDraftPreviewProduct(null);
+    setDraftPreviewData(null);
   };
 
-  const handlePackageReject = async () => {
-    if (!reviewComment.trim()) {
-      alert("请填写退回原因（必填）");
-      return;
-    }
-    if (!confirm("确定【退回设计修改】吗？")) return;
+  // 根据角色过滤菜单
+  const menuItems = useMemo(() => {
+    const role = currentUser?.role || "";
+    const items = [
+      { id: "dashboard", label: "数据总览", icon: LayoutDashboard, roles: ["管理员", "开发人员", "设计师", "内容人员", "业务人员"] },
+      { id: "products", label: "全部产品", icon: Package, roles: ["管理员", "开发人员", "业务人员"] },
+      { id: "ai-drafts", label: "AI 草稿", icon: Bot, roles: ["管理员", "开发人员"] },
+      { id: "design", label: "设计任务", icon: Palette, roles: ["管理员", "设计师"] },
+      { id: "content", label: "内容策划", icon: FileText, roles: ["管理员", "内容人员"] },
+      { id: "users", label: "用户管理", icon: Users, roles: ["管理员"] },
+    ];
 
-    setSubmitting(true);
-    try {
-      const currentHistory = Array.isArray(product.review_history) ? product.review_history : [];
-      const newHistory = [
-        ...currentHistory,
-        {
-          time: getCurrentBeijingISO(),
-          note: `[包装设计退回] ${reviewComment}`,
-          reviewer: currentUser?.name || "管理员",
-        },
-      ];
+    return items.filter((item) => item.roles.includes(role));
+  }, [currentUser?.role]);
 
-      await updateData("products", product.id, {
-        package_review_status: "rejected",
-        package_review_note: reviewComment.trim(),
-        review_history: newHistory,
-        stage: 2,
-        status: "包装设计中",
-      });
-
-      alert("✅ 已退回设计修改！");
-      onRefresh?.();
-      onClose?.();
-    } catch (e) {
-      alert("退回失败：" + (e?.message || "未知错误"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ========== 审核状态徽章 ==========
-  let reviewBadge = null;
-  if (isDevAssetsReview) {
-    reviewBadge = (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-        🧪 待复审 - 开发素材
-      </span>
-    );
-  } else if (isPackageReview) {
-    reviewBadge = (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
-        🎨 待审核 - 包装设计
-      </span>
+  // 如果正在检查登录状态
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-gray-500">加载中...</div>
+      </div>
     );
   }
 
+  // 如果未登录
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm">
-      <div className="relative w-full max-w-5xl overflow-hidden rounded-3xl bg-zinc-50 shadow-2xl">
-        {/* ========== Header ========== */}
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-6 py-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-lg font-bold text-zinc-900">
-                {product.product_title || product.category || "产品详情"}
-              </h2>
-              {reviewBadge}
-            </div>
-            <div className="mt-1 flex items-center gap-4 text-xs text-zinc-500">
-              <span>开发月份：{product.develop_month || "-"}</span>
-              <span>阶段：{product.stage}</span>
-              <span>状态：{product.status || "-"}</span>
+    <div className="min-h-screen bg-gray-100 flex">
+      {/* 侧边栏 */}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-gray-900 to-gray-800 
+          transform transition-transform duration-300 ease-in-out
+          lg:translate-x-0 lg:static lg:inset-auto
+          ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        <div className="flex flex-col h-full">
+          {/* Logo */}
+          <div className="p-6 border-b border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <Package className="text-white" size={24} />
+              </div>
+              <div>
+                <h1 className="text-white font-bold">产品开发系统</h1>
+                <p className="text-gray-400 text-xs">Product Dev System</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {product.is_ai_generated && product.created_from_draft_id && onOpenDraftPreview && (
-              <button
-                onClick={() => onOpenDraftPreview(product)}
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-              >
-                <Eye className="h-4 w-4" />
-                查看AI草稿
-              </button>
-            )}
+          {/* 用户信息 */}
+          <div className="px-4 py-3 border-b border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                {(currentUser?.name || "U")[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-sm font-medium truncate">
+                  {currentUser?.name || currentUser?.username}
+                </div>
+                <div className="text-gray-400 text-xs">{currentUser?.role}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 导航菜单 */}
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`
+                    w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
+                    ${isActive
+                      ? "bg-blue-600 text-white shadow-lg"
+                      : "text-gray-300 hover:bg-gray-700 hover:text-white"
+                    }
+                  `}
+                >
+                  <Icon size={20} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* 底部操作 */}
+          <div className="p-4 border-t border-gray-700 space-y-2">
             <button
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-all"
             >
-              🗑️ 删除
-            </button>
-            <button
-              onClick={onClose}
-              className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-            >
-              <X className="h-5 w-5" />
+              <LogOut size={20} />
+              退出登录
             </button>
           </div>
         </div>
+      </aside>
 
-        {/* ========== Content ========== */}
-        <div className="max-h-[75vh] overflow-y-auto px-6 py-5 space-y-5">
-          
-          {/* 审核提示条 */}
-          {needsReview && (
-            <div className={`rounded-2xl border-2 p-4 ${
-              isDevAssetsReview 
-                ? "border-blue-300 bg-blue-50" 
-                : "border-yellow-300 bg-yellow-50"
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl text-white text-xl ${
-                  isDevAssetsReview ? "bg-blue-600" : "bg-yellow-600"
-                }`}>
-                  {isDevAssetsReview ? "🧪" : "🎨"}
-                </div>
-                <div>
-                  <div className={`text-sm font-bold ${
-                    isDevAssetsReview ? "text-blue-800" : "text-yellow-800"
-                  }`}>
-                    {isDevAssetsReview ? "待复审：请检查开发资料、竞品信息和图片素材" : "待审核：请检查包装设计稿"}
-                  </div>
-                  <div className="text-xs text-zinc-600 mt-0.5">
-                    确认后点击底部按钮通过或退回
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+      {/* 移动端遮罩 */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
-          {/* ========== 1. 基础信息 ========== */}
-          <SectionCard icon={FileText} title="基础信息">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <FieldItem label="开发月份 *" value={product.develop_month} />
-              <FieldItem label="开发时间" value={product.develop_time} />
-              <FieldItem label="开发品类 *" value={product.category} />
-              <FieldItem label="赛道" value={product.track} />
-              <FieldItem label="目标市场" value={product.target_market || product.market} />
-              <FieldItem label="目标平台" value={product.target_platform || product.platform} />
-            </div>
-          </SectionCard>
-
-          {/* ========== 2. 产品规格 ========== */}
-          <SectionCard icon={Droplet} title="产品规格">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <FieldItem label="料体颜色" value={product.material_color || product.texture_color} />
-              <FieldItem label="容量" value={product.capacity || product.volume} />
-              <FieldItem label="香味" value={product.fragrance || product.scent} />
-              <FieldItem label="价格" value={product.price || product.pricing} />
-            </div>
-          </SectionCard>
-
-          {/* ========== 3. 产品卖点 ========== */}
-          <SectionCard icon={Sparkles} title="产品卖点">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FieldItem label="卖点 *" value={product.selling_point} fullWidth />
-              <FieldItem label="主概念" value={product.main_concept || product.positioning} />
-              <FieldItem label="主要成分" value={product.ingredient || product.ingredients} />
-              <FieldItem label="主打功效" value={product.primary_benefit || product.main_efficacy} />
-              <FieldItem label="完整成分" value={product.ingredients} />
-            </div>
-          </SectionCard>
-
-          {/* ========== 4. 包装设计需求 ========== */}
-          <SectionCard icon={Palette} title="包装设计需求">
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 min-h-[80px] whitespace-pre-wrap">
-              {product.packaging_design || product.packaging_requirements || <span className="text-zinc-400">-</span>}
-            </div>
-          </SectionCard>
-
-          {/* ========== 5. 竞品信息（3条链接 + 3张图片）========== */}
-          <SectionCard 
-            icon={LinkIcon} 
-            title="竞品信息（3条链接 + 3张图片）"
-            highlight={isDevAssetsReview}
-            badge={isDevAssetsReview && (
-              <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-semibold text-white">
-                需检查
-              </span>
-            )}
-          >
-            <div className="grid gap-4 lg:grid-cols-3">
-              {competitors.map((comp, idx) => (
-                <div key={idx} className="rounded-xl border border-zinc-200 bg-white p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-semibold text-zinc-800">竞品 {idx + 1}</span>
-                    {comp.link ? (
-                      <a
-                        href={comp.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                      >
-                        查看链接 <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : (
-                      <span className="text-xs text-zinc-400">无链接</span>
-                    )}
-                  </div>
-                  
-                  {/* 竞品链接显示 */}
-                  <div className="mb-3">
-                    <div className="text-xs text-zinc-500 mb-1">竞品链接 {idx + 1}</div>
-                    <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 truncate">
-                      {comp.link || <span className="text-zinc-400">https://...</span>}
-                    </div>
-                  </div>
-
-                  {/* 竞品图片显示 */}
-                  <div>
-                    <div className="text-xs text-zinc-500 mb-1">竞品图片 {idx + 1}</div>
-                    {comp.img ? (
-                      <button type="button" className="w-full" onClick={() => safeOpen(comp.img)}>
-                        <img
-                          src={comp.img}
-                          alt={`竞品图 ${idx + 1}`}
-                          className="w-full h-[120px] object-contain bg-zinc-50 rounded-lg border border-zinc-200"
-                        />
-                      </button>
-                    ) : (
-                      <div className="w-full h-[120px] bg-zinc-50 rounded-lg border border-dashed border-zinc-200 flex items-center justify-center text-xs text-zinc-400">
-                        <div className="text-center">
-                          <ImageIcon className="h-5 w-5 mx-auto mb-1 opacity-40" />
-                          暂无图片
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          {/* ========== 6. 参考包装 & 瓶型图 ========== */}
-          <SectionCard 
-            icon={Package} 
-            title="参考包装 & 瓶型"
-            highlight={isDevAssetsReview}
-            badge={isDevAssetsReview && (
-              <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-semibold text-white">
-                需检查
-              </span>
-            )}
-          >
-            <div className="grid gap-4 lg:grid-cols-2">
-              {/* 参考包装 */}
-              <div>
-                <div className="text-xs text-zinc-500 mb-2 font-medium">参考包装图</div>
-                {refImgs.length === 0 ? (
-                  <ImgTile title="参考包装" src={null} />
-                ) : (
-                  <div className="grid gap-2 grid-cols-2">
-                    {refImgs.map((u, idx) => (
-                      <ImgTile key={idx} title={`参考图 ${idx + 1}`} src={u} size="small" />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 瓶型图 */}
-              <div>
-                <div className="text-xs text-zinc-500 mb-2 font-medium">瓶型图</div>
-                <ImgTile title="瓶型图" src={bottleImg} />
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* ========== 7. 包装设计稿（设计师上传）========== */}
-          {(packageDesignUrl || isPackageReview) && (
-            <SectionCard 
-              icon={Palette} 
-              title="包装设计稿（设计师上传）"
-              highlight={isPackageReview}
-              badge={isPackageReview && (
-                <span className="rounded-full bg-yellow-600 px-2.5 py-0.5 text-xs font-semibold text-white">
-                  待审核
-                </span>
-              )}
+      {/* 主内容区 */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* 顶部栏 */}
+        <header className="bg-white shadow-sm border-b border-gray-200 px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* 移动端菜单按钮 */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
             >
-              {packageDesignUrl ? (
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+
+            {/* 页面标题 */}
+            <h2 className="text-lg font-bold text-gray-800 hidden sm:block">
+              {menuItems.find((m) => m.id === activeTab)?.label || ""}
+            </h2>
+
+            {/* 操作按钮 */}
+            <div className="flex items-center gap-2 ml-auto">
+              {(activeTab === "products" || activeTab === "dashboard") && (
                 <>
-                  <ImgTile title="当前设计稿" src={packageDesignUrl} size="large" />
-                  {product.package_designer_id && (
-                    <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500">
-                      <span className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5" />
-                        设计师: {product.package_designer_id}
-                      </span>
-                      {product.package_design_time && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          提交: {formatTime(product.package_design_time)}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <button
+                    onClick={() => setShowProductFormAI(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all text-sm font-semibold"
+                  >
+                    <Bot size={18} />
+                    <span className="hidden sm:inline">AI 创建</span>
+                  </button>
+                  <button
+                    onClick={() => setShowProductForm(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl hover:shadow-lg transition-all text-sm font-semibold"
+                  >
+                    <Plus size={18} />
+                    <span className="hidden sm:inline">新建产品</span>
+                  </button>
                 </>
-              ) : (
-                <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-10 text-center text-sm text-zinc-400">
-                  <Palette className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  设计师尚未上传包装设计稿
-                </div>
               )}
-            </SectionCard>
-          )}
-
-          {/* ========== 8. 审核意见 ========== */}
-          {needsReview && (
-            <SectionCard icon={FileText} title="审核意见">
-              <div className="text-xs text-zinc-500 mb-2">退回时必填审核意见</div>
-              <textarea
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none ring-blue-500 focus:ring-2 focus:bg-white transition-colors"
-                rows={3}
-                placeholder={
-                  isDevAssetsReview 
-                    ? "例如：瓶型图需要换成透明背景；参考图至少补一张正面；尺寸比例不对..."
-                    : "例如：主标题字号需要加大；背景色调太暗；LOGO位置需要调整..."
-                }
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-              />
-            </SectionCard>
-          )}
-
-          {/* ========== 9. 退回历史记录 ========== */}
-          {product.review_history && Array.isArray(product.review_history) && product.review_history.length > 0 && (
-            <SectionCard icon={Clock} title="退回历史记录">
-              <div className="space-y-2">
-                {product.review_history.map((record, idx) => (
-                  <div key={idx} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-zinc-700">第 {idx + 1} 次退回</span>
-                      <span className="text-xs text-zinc-500">{formatTime(record.time)}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">审核人：{record.reviewer || "管理员"}</div>
-                    <div className="mt-2 text-sm text-zinc-800">{record.note}</div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
-
-        </div>
-
-        {/* ========== Footer ========== */}
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-6 py-4">
-          {/* 开发素材复审模式 */}
-          {isDevAssetsReview && (
-            <>
-              <button
-                onClick={handleDevAssetsReject}
-                disabled={submitting || !reviewComment.trim()}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <XCircle className="h-4 w-4" />
-                退回开发补充
-              </button>
 
               <button
-                onClick={handleDevAssetsApprove}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                onClick={loadProducts}
+                disabled={loadingProducts}
+                className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                title="刷新数据"
               >
-                <CheckCircle className="h-4 w-4" />
-                {submitting ? "处理中..." : "✅ 通过复审 → 进入设计待接单"}
-              </button>
-            </>
-          )}
-
-          {/* 包装设计审核模式 */}
-          {isPackageReview && (
-            <>
-              <button
-                onClick={handlePackageReject}
-                disabled={submitting || !reviewComment.trim()}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <XCircle className="h-4 w-4" />
-                退回设计修改
-              </button>
-
-              <button
-                onClick={handlePackageApprove}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-xl bg-yellow-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-yellow-700 disabled:opacity-50 transition-colors"
-              >
-                <CheckCircle className="h-4 w-4" />
-                {submitting ? "处理中..." : "✅ 通过审核 → 进入内容策划"}
-              </button>
-            </>
-          )}
-
-          {/* 非审核模式 */}
-          {!needsReview && (
-            <div className="flex w-full justify-end">
-              <button
-                onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
-              >
-                关闭
+                <svg
+                  className={`w-5 h-5 text-gray-600 ${loadingProducts ? "animate-spin" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
               </button>
             </div>
+          </div>
+        </header>
+
+        {/* 页面内容 */}
+        <div className="flex-1 overflow-auto p-4 lg:p-6">
+          {activeTab === "dashboard" && (
+            <Dashboard
+              products={products}
+              currentUser={currentUser}
+              onRefresh={loadProducts}
+            />
+          )}
+
+          {activeTab === "products" && (
+            <ProductList
+              products={products}
+              currentUser={currentUser}
+              onRefresh={loadProducts}
+              onViewProduct={setSelectedProduct}
+              onEditProduct={setEditingProduct}
+              onOpenDraftPreview={openDraftPreview}
+            />
+          )}
+
+          {activeTab === "ai-drafts" && (
+            <AIDraftDashboard
+              currentUser={currentUser}
+              onRefresh={loadProducts}
+            />
+          )}
+
+          {activeTab === "design" && (
+            <DesignerDashboard
+              products={products}
+              currentUser={currentUser}
+              onRefresh={loadProducts}
+            />
+          )}
+
+          {activeTab === "content" && (
+            <ContentDashboard
+              products={products}
+              currentUser={currentUser}
+              onRefresh={loadProducts}
+            />
+          )}
+
+          {activeTab === "users" && (
+            <UserManagement currentUser={currentUser} />
           )}
         </div>
+      </main>
+
+      {/* 弹窗：新建产品 */}
+      {showProductForm && (
+        <ProductForm
+          currentUser={currentUser}
+          onClose={() => setShowProductForm(false)}
+          onSuccess={() => {
+            setShowProductForm(false);
+            loadProducts();
+          }}
+        />
+      )}
+
+      {/* 弹窗：AI 创建产品 */}
+      {showProductFormAI && (
+        <ProductFormAI
+          currentUser={currentUser}
+          onClose={() => setShowProductFormAI(false)}
+          onSuccess={() => {
+            setShowProductFormAI(false);
+            loadProducts();
+          }}
+        />
+      )}
+
+      {/* 弹窗：产品详情 */}
+      {selectedProduct && (
+        <ProductDetail
+          product={selectedProduct}
+          currentUser={currentUser}
+          onClose={() => setSelectedProduct(null)}
+          onRefresh={loadProducts}
+          onOpenDraftPreview={openDraftPreview}
+        />
+      )}
+
+      {/* 弹窗：产品开发编辑 */}
+      {editingProduct && (
+        <ProductDevEdit
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSuccess={() => {
+            setEditingProduct(null);
+            loadProducts();
+          }}
+        />
+      )}
+
+      {/* 弹窗：AI 草稿预览 */}
+      {draftPreviewProduct && draftPreviewData && (
+        <DraftReviewModal
+          draft={draftPreviewData}
+          product={draftPreviewProduct}
+          mode="view"
+          currentUser={currentUser}
+          onClose={closeDraftPreview}
+          onSuccess={() => {
+            closeDraftPreview();
+            loadProducts();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ==================== 产品列表组件 ====================
+function ProductList({
+  products,
+  currentUser,
+  onRefresh,
+  onViewProduct,
+  onEditProduct,
+  onOpenDraftPreview,
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStage, setFilterStage] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  // 过滤产品
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      // 搜索过滤
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const searchFields = [
+          p.category,
+          p.product_title,
+          p.selling_point,
+          p.develop_month,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!searchFields.includes(q)) return false;
+      }
+
+      // 阶段过滤
+      if (filterStage !== "all" && String(p.stage) !== filterStage) {
+        return false;
+      }
+
+      // 状态过滤
+      if (filterStatus !== "all" && p.status !== filterStatus) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [products, searchQuery, filterStage, filterStatus]);
+
+  // 获取唯一状态列表
+  const uniqueStatuses = useMemo(() => {
+    const statuses = new Set(products.map((p) => p.status).filter(Boolean));
+    return Array.from(statuses);
+  }, [products]);
+
+  return (
+    <div className="space-y-4">
+      {/* 过滤栏 */}
+      <div className="bg-white rounded-xl shadow p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="text"
+            placeholder="搜索产品..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 min-w-[200px] px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          />
+
+          <select
+            value={filterStage}
+            onChange={(e) => setFilterStage(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="all">全部阶段</option>
+            <option value="1">阶段 1 - 开发</option>
+            <option value="2">阶段 2 - 设计</option>
+            <option value="3">阶段 3 - 设计审核</option>
+            <option value="4">阶段 4 - 内容</option>
+            <option value="5">阶段 5 - 内容审核</option>
+            <option value="6">阶段 6 - 完成</option>
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="all">全部状态</option>
+            {uniqueStatuses.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+
+          <div className="text-sm text-gray-500">
+            共 {filteredProducts.length} 个产品
+          </div>
+        </div>
+      </div>
+
+      {/* 产品列表 */}
+      <div className="bg-white rounded-xl shadow overflow-hidden">
+        {filteredProducts.length === 0 ? (
+          <div className="p-12 text-center">
+            <Package className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-2">暂无产品数据</p>
+            <p className="text-sm text-gray-400">
+              点击顶部按钮创建第一个产品
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+                <tr>
+                  <th className="px-6 py-3 text-left">产品</th>
+                  <th className="px-6 py-3 text-left">开发月份</th>
+                  <th className="px-6 py-3 text-left">阶段</th>
+                  <th className="px-6 py-3 text-left">状态</th>
+                  <th className="px-6 py-3 text-left">来源</th>
+                  <th className="px-6 py-3 text-left">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredProducts.map((product) => (
+                  <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-gray-900">
+                        {product.category || product.product_title || "未命名"}
+                      </div>
+                      <div className="text-sm text-gray-500 truncate max-w-xs">
+                        {product.selling_point?.slice(0, 50) || "-"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {product.develop_month || "-"}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+                        阶段 {product.stage || 1}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          product.status === "可做货"
+                            ? "bg-green-100 text-green-700"
+                            : product.status === "待审核" || product.status === "待管理员复审"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {product.status || "进行中"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {product.is_ai_generated ? (
+                        <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-medium">
+                          🤖 AI
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">手动</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onViewProduct(product)}
+                          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                          title="查看详情"
+                        >
+                          <Eye size={18} />
+                        </button>
+
+                        {/* 开发阶段可编辑 */}
+                        {product.stage === 1 &&
+                          currentUser?.role === "开发人员" && (
+                            <button
+                              onClick={() => onEditProduct(product)}
+                              className="px-3 py-1 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+                            >
+                              编辑
+                            </button>
+                          )}
+
+                        {/* AI 产品可查看草稿 */}
+                        {product.is_ai_generated &&
+                          product.created_from_draft_id && (
+                            <button
+                              onClick={() => onOpenDraftPreview(product)}
+                              className="px-3 py-1 rounded-lg border border-purple-200 text-purple-600 text-sm hover:bg-purple-50"
+                            >
+                              AI草稿
+                            </button>
+                          )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
