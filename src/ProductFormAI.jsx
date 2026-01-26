@@ -39,6 +39,23 @@ const PROVIDER_META = {
   deepseek: { label: "DeepSeek" },
 };
 
+
+
+await updateData("products", product.id, {
+  dev_assets_status: "已通过",
+  dev_assets_reviewed_at: new Date().toISOString(),
+  dev_assets_reviewed_by: currentUser.id,
+  dev_assets_review_comment: reviewComment, // 你建的字段名
+  stage: 2,
+  status: "待接单",
+});
+
+
+
+
+
+
+
 const providerLabel = (p) => PROVIDER_META?.[p]?.label || String(p || "Unknown");
 
 const readAIConfig = () => {
