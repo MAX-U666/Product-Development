@@ -4,6 +4,20 @@ const SB_URL = 'https://ppzwadqyqjadfdklkvtw.supabase.co'
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwendhZHF5cWphZGZka2xrdnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4ODgzOTQsImV4cCI6MjA4NDQ2NDM5NH0.xRfWovMVy55OqFFeS3hi1bn7X3CMji-clm8Hzo0yBok'
 const STORAGE_BUCKET = 'bottle-library'
 
+// ✅ 按 draft_id 取单条 AI 草稿（用于设计/内容查看）
+export async function fetchAIDraftById(draftId) {
+  if (!draftId) return null
+
+  const url = new URL(`${SB_URL}/rest/v1/ai_drafts`)
+  url.searchParams.set('select', '*')
+  url.searchParams.set('id', `eq.${draftId}`)
+  url.searchParams.set('limit', '1')
+
+  const res = await fetch(url.toString(), { headers: baseHeaders() })
+  if (!res.ok) throw new Error(await res.text())
+  const rows = await res.json()
+  return rows?.[0] || null
+}
 
 
 function baseHeaders(extra = {}) {
