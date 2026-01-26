@@ -183,6 +183,7 @@ export default function ProductDevEdit({ product, onClose, onSuccess }) {
         dev_assets_status: "待复审",
         dev_assets_submit_time: new Date().toISOString(),
         status: "开发复审中",
+        stage: 1,
       });
 
       alert("✅ 已提交开发素材复审！\n\n下一步：管理员在【全部产品-详情】里审核通过后，才会进入设计待接单。 ");
