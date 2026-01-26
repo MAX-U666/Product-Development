@@ -1,12 +1,81 @@
 // File: src/DraftReviewModal.jsx
 
 import React, { useState, useEffect } from "react";
-import { X, CheckCircle, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { X, CheckCircle, XCircle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import FieldRow from "./ProductFormAI/components/FieldRow";
 import { createProductFromDraft, updateDraftStatus } from "./api";
 import { getCurrentBeijingISO } from "./timeConfig";
 
-export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "review" }) {
+function safeOpen(url) {
+  if (!url) return;
+  const u = String(url).trim();
+  if (!u) return;
+  if (!/^https?:\/\//i.test(u)) {
+    window.open("https://" + u, "_blank", "noopener,noreferrer");
+    return;
+  }
+  window.open(u, "_blank", "noopener,noreferrer");
+}
+
+function normalizeImageList(maybe) {
+  if (!maybe) return [];
+  // already array
+  if (Array.isArray(maybe)) return maybe.filter(Boolean);
+
+  // string: could be JSON array or single url
+  if (typeof maybe === "string") {
+    const s = maybe.trim();
+    if (!s) return [];
+    if (s.startsWith("[")) {
+      try {
+        const arr = JSON.parse(s);
+        if (Array.isArray(arr)) return arr.filter(Boolean);
+      } catch (e) {
+        // ignore
+      }
+    }
+    // comma-separated or single
+    if (s.includes(",")) return s.split(",").map(x => x.trim()).filter(Boolean);
+    return [s];
+  }
+
+  return [];
+}
+
+function ImgTile({ title, src }) {
+  if (!src) {
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-400 flex items-center justify-center h-[160px]">
+        暂无
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-3 py-2 bg-zinc-50 border-b border-zinc-200">
+        <div className="text-sm font-semibold text-zinc-800">{title}</div>
+        <button
+          type="button"
+          onClick={() => safeOpen(src)}
+          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+        >
+          打开 <ExternalLink className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <button type="button" className="w-full" onClick={() => safeOpen(src)}>
+        <img src={src} alt={title} className="w-full h-[220px] object-contain bg-white" />
+      </button>
+    </div>
+  );
+}
+
+export default function DraftReviewModal({
+  draft,
+  onClose,
+  onSuccess,
+  mode = "review",
+  product = null, // ✅ 新增：关联产品，用于展示瓶型图 & 参考包装
+}) {
   const [formData, setFormData] = useState({
     positioning: "",
     sellingPoint: "",
@@ -25,9 +94,6 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
   const [showCompetitors, setShowCompetitors] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ✅ view 模式：仅查看，不允许审核/创建
-  const isViewOnly = mode === "view";
-
   // 初始化表单数据
   useEffect(() => {
     if (draft) {
@@ -44,17 +110,10 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
         keywords: draft.keywords || "",
         packaging: draft.packaging_requirements || "",
       });
-
-      // ✅ 切换不同草稿时，审核意见清空（避免串草稿）
-      setReviewComment("");
-      setShowCompetitors(false);
     }
   }, [draft]);
 
   const handleApprove = async () => {
-    // ✅ view-only 下禁用（保险）
-    if (isViewOnly) return;
-
     if (!reviewComment.trim()) {
       alert("请填写审核意见");
       return;
@@ -90,22 +149,15 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
         created_at: getCurrentBeijingISO(),
       };
 
-      console.log("准备创建产品，数据：", productData);
-
       const createResult = await createProductFromDraft(productData);
-
-      console.log("API 返回结果：", createResult);
-
       if (!createResult?.success || !createResult?.product_id) {
         throw new Error(createResult?.message || "创建产品失败");
       }
 
-      const productId = createResult.product_id;
-
-      // 2. 更新草稿状态（适配原有 API）
+      // 2. 更新草稿状态
       await updateDraftStatus(draft.id, "approve", reviewComment, draft.created_by);
 
-      alert(`✅ 产品已创建成功！\n\n产品 ID: ${productId}`);
+      alert(`✅ 产品已创建成功！\n\n产品 ID: ${createResult.product_id}`);
       onSuccess?.();
       onClose?.();
     } catch (e) {
@@ -116,9 +168,6 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
   };
 
   const handleReject = async () => {
-    // ✅ view-only 下禁用（保险）
-    if (isViewOnly) return;
-
     if (!reviewComment.trim()) {
       alert("拒绝时必须填写审核意见");
       return;
@@ -128,9 +177,7 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
 
     setSubmitting(true);
     try {
-      // 适配原有 API
       await updateDraftStatus(draft.id, "reject", reviewComment, draft.created_by);
-
       alert("✅ 已拒绝该草稿");
       onSuccess?.();
       onClose?.();
@@ -146,7 +193,22 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
   const aiExplain = draft.ai_explanations || {};
   const competitors = draft.competitors_data || [];
 
-  const modalTitle = isViewOnly ? "查看 AI 草稿" : "审核 AI 草稿";
+  // =========================
+  // ✅ 新增：素材区数据来源（尽量兼容你现在已有字段）
+  // =========================
+  const bottleImg =
+    product?.bottle_image_url ||
+    product?.bottle_img_url ||
+    product?.bottle_img ||
+    product?.bottle_url ||
+    null;
+
+  const refImgs =
+    normalizeImageList(product?.ref_packaging_images).length > 0
+      ? normalizeImageList(product?.ref_packaging_images)
+      : normalizeImageList(product?.ref_design_imgs || product?.ref_design_img);
+
+  const isView = mode === "view";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm">
@@ -154,13 +216,19 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-4">
           <div>
-            <div className="text-base font-semibold text-zinc-900">{modalTitle}</div>
+            <div className="text-base font-semibold text-zinc-900">
+              {isView ? "查看 AI 草稿" : "审核 AI 草稿"}
+            </div>
             <div className="mt-1 text-xs text-zinc-500">
               ID: {draft.id} | 创建时间: {new Date(draft.created_at).toLocaleString("zh-CN")}
-              {isViewOnly ? " | 只读模式" : ""}
+              {isView ? " | 只读模式" : ""}
             </div>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100"
+            aria-label="Close"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -190,124 +258,159 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
             </div>
           </div>
 
-          {/* AI 生成的字段（可编辑）*/}
+          {/* AI 生成的字段（可编辑/只读） */}
           <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
-            <div className="text-sm font-semibold text-zinc-900">AI 生成内容（可编辑）</div>
+            <div className="text-sm font-semibold text-zinc-900">AI 生成内容（{isView ? "只读" : "可编辑"}）</div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <FieldRow
                 label="产品定位"
                 value={formData.positioning}
-                onChange={(v) => setFormData((p) => ({ ...p, positioning: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, positioning: v }))}
                 placeholder="例如：高保湿修护、敏感肌可用..."
                 aiNote={aiExplain?.positioning?.note}
                 aiConfidence={aiExplain?.positioning?.confidence}
                 aiReason={aiExplain?.positioning?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="核心卖点"
                 multiline
                 value={formData.sellingPoint}
-                onChange={(v) => setFormData((p) => ({ ...p, sellingPoint: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, sellingPoint: v }))}
                 placeholder="功效+成分+体验+人群..."
                 aiNote={aiExplain?.sellingPoint?.note || aiExplain?.selling_point?.note}
                 aiConfidence={aiExplain?.sellingPoint?.confidence || aiExplain?.selling_point?.confidence}
                 aiReason={aiExplain?.sellingPoint?.reason || aiExplain?.selling_point?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="主要成分"
                 value={formData.ingredients}
-                onChange={(v) => setFormData((p) => ({ ...p, ingredients: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, ingredients: v }))}
                 placeholder="例如：Niacinamide, PDRN..."
                 aiNote={aiExplain?.ingredients?.note}
                 aiConfidence={aiExplain?.ingredients?.confidence}
                 aiReason={aiExplain?.ingredients?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="主打功效"
                 value={formData.efficacy}
-                onChange={(v) => setFormData((p) => ({ ...p, efficacy: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, efficacy: v }))}
                 placeholder="例如：美白、保湿、修护..."
                 aiNote={aiExplain?.efficacy?.note}
                 aiConfidence={aiExplain?.efficacy?.confidence}
                 aiReason={aiExplain?.efficacy?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="容量"
                 value={formData.volume}
-                onChange={(v) => setFormData((p) => ({ ...p, volume: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, volume: v }))}
                 placeholder="例如：400ml"
                 aiNote={aiExplain?.volume?.note}
                 aiConfidence={aiExplain?.volume?.confidence}
                 aiReason={aiExplain?.volume?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="香味"
                 value={formData.scent}
-                onChange={(v) => setFormData((p) => ({ ...p, scent: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, scent: v }))}
                 placeholder="例如：花香/果香..."
                 aiNote={aiExplain?.scent?.note}
                 aiConfidence={aiExplain?.scent?.confidence}
                 aiReason={aiExplain?.scent?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="料体颜色"
                 value={formData.color}
-                onChange={(v) => setFormData((p) => ({ ...p, color: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, color: v }))}
                 placeholder="例如：乳白/透明..."
                 aiNote={aiExplain?.color?.note || aiExplain?.texture_color?.note}
                 aiConfidence={aiExplain?.color?.confidence || aiExplain?.texture_color?.confidence}
                 aiReason={aiExplain?.color?.reason || aiExplain?.texture_color?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="定价"
                 value={formData.pricing}
-                onChange={(v) => setFormData((p) => ({ ...p, pricing: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, pricing: v }))}
                 placeholder="例如：IDR 49,900"
                 aiNote={aiExplain?.pricing?.note}
                 aiConfidence={aiExplain?.pricing?.confidence}
                 aiReason={aiExplain?.pricing?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="产品标题"
                 multiline
                 value={formData.title}
-                onChange={(v) => setFormData((p) => ({ ...p, title: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, title: v }))}
                 placeholder="关键词 + 卖点 + 容量"
                 aiNote={aiExplain?.title?.note}
                 aiConfidence={aiExplain?.title?.confidence}
                 aiReason={aiExplain?.title?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="搜索关键词"
                 multiline
                 value={formData.keywords}
-                onChange={(v) => setFormData((p) => ({ ...p, keywords: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, keywords: v }))}
                 placeholder="keyword1, keyword2..."
                 aiNote={aiExplain?.keywords?.note}
                 aiConfidence={aiExplain?.keywords?.confidence}
                 aiReason={aiExplain?.keywords?.reason}
+                readOnly={isView}
               />
 
               <FieldRow
                 label="包装设计需求"
                 multiline
                 value={formData.packaging}
-                onChange={(v) => setFormData((p) => ({ ...p, packaging: v }))}
+                onChange={(v) => !isView && setFormData((p) => ({ ...p, packaging: v }))}
                 placeholder="风格、色调、元素..."
                 aiNote={aiExplain?.packaging?.note || aiExplain?.packaging_requirements?.note}
                 aiConfidence={aiExplain?.packaging?.confidence || aiExplain?.packaging_requirements?.confidence}
                 aiReason={aiExplain?.packaging?.reason || aiExplain?.packaging_requirements?.reason}
+                readOnly={isView}
               />
+            </div>
+          </div>
+
+          {/* ✅ 新增：开发上传的素材（瓶型图 & 参考包装图） */}
+          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+            <div className="text-sm font-semibold text-zinc-900">开发素材（瓶型图 / 参考包装）</div>
+            <div className="mt-3 grid gap-4 lg:grid-cols-2">
+              <div>
+                <div className="mb-2 text-xs text-zinc-500">瓶型图</div>
+                <ImgTile title="瓶型图" src={bottleImg} />
+              </div>
+
+              <div>
+                <div className="mb-2 text-xs text-zinc-500">参考包装图</div>
+                {refImgs.length === 0 ? (
+                  <ImgTile title="参考包装图" src={null} />
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {refImgs.map((u, idx) => (
+                      <ImgTile key={idx} title={`参考图 ${idx + 1}`} src={u} />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -366,13 +469,15 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
               </div>
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
                 <div className="text-xs text-zinc-500">预估成本</div>
-                <div className="font-semibold text-zinc-900">${(draft.estimated_cost || 0).toFixed(4)}</div>
+                <div className="font-semibold text-zinc-900">
+                  ${(draft.estimated_cost || 0).toFixed(4)}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ✅ 审核意见（仅 review 显示） */}
-          {!isViewOnly && (
+          {/* 审核意见（只在 review 模式显示） */}
+          {!isView && (
             <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
               <div className="text-sm font-semibold text-zinc-900">审核意见 *</div>
               <textarea
@@ -386,28 +491,39 @@ export default function DraftReviewModal({ draft, onClose, onSuccess, mode = "re
           )}
         </div>
 
-        {/* ✅ Footer（仅 review 显示） */}
-        {!isViewOnly && (
-          <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-5 py-4">
-            <button
-              onClick={handleReject}
-              disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-            >
-              <XCircle className="h-4 w-4" />
-              拒绝
-            </button>
+        {/* Footer：view 模式只保留关闭；review 模式保留拒绝/通过 */}
+        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-5 py-4">
+          {isView ? (
+            <div className="flex w-full justify-end">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+              >
+                关闭
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={handleReject}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                <XCircle className="h-4 w-4" />
+                拒绝
+              </button>
 
-            <button
-              onClick={handleApprove}
-              disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <CheckCircle className="h-4 w-4" />
-              {submitting ? "处理中..." : "✅ 通过并创建产品"}
-            </button>
-          </div>
-        )}
+              <button
+                onClick={handleApprove}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <CheckCircle className="h-4 w-4" />
+                {submitting ? "处理中..." : "✅ 通过并创建产品"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
