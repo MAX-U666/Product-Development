@@ -144,25 +144,35 @@ export default function ProductDetail({
   // 查询瓶型图（如果只有 bottle_id 没有 bottle_img）
   useEffect(() => {
     async function fetchBottleImg() {
+      console.log("🍾 瓶型图查询 - bottle_img:", product?.bottle_img);
+      console.log("🍾 瓶型图查询 - bottle_id:", product?.bottle_id);
+      
       // 如果已有 bottle_img，直接用
       if (product?.bottle_img) {
+        console.log("🍾 使用 bottle_img:", product.bottle_img);
         setBottleImgUrl(product.bottle_img);
         return;
       }
       // 如果有 bottle_id，查询 bottles 表
       if (product?.bottle_id && supabase) {
         try {
+          console.log("🍾 查询 bottles 表, id:", product.bottle_id);
           const { data, error } = await supabase
             .from("bottles")
             .select("img_url")
             .eq("id", product.bottle_id)
             .single();
+          
+          console.log("🍾 查询结果:", data, error);
+          
           if (!error && data?.img_url) {
             setBottleImgUrl(data.img_url);
           }
         } catch (e) {
-          console.error("查询瓶型图失败:", e);
+          console.error("🍾 查询瓶型图失败:", e);
         }
+      } else {
+        console.log("🍾 无法查询: supabase=", !!supabase, "bottle_id=", product?.bottle_id);
       }
     }
     fetchBottleImg();
