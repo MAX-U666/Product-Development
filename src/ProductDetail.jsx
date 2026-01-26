@@ -25,14 +25,8 @@ import {
   Palette,
   Beaker,
 } from "lucide-react";
-import { updateData } from "./api";
-import { createClient } from "@supabase/supabase-js";
+import { updateData, fetchBottleById } from "./api";
 import { getCurrentBeijingISO, formatTime } from "./timeConfig";
-
-// Supabase 客户端（用于查询瓶型图）
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // ========== 工具函数 ==========
 function safeOpen(url) {
@@ -154,25 +148,18 @@ export default function ProductDetail({
         return;
       }
       // 如果有 bottle_id，查询 bottles 表
-      if (product?.bottle_id && supabase) {
+      if (product?.bottle_id) {
         try {
           console.log("🍾 查询 bottles 表, id:", product.bottle_id);
-          const { data, error } = await supabase
-            .from("bottles")
-            .select("img_url")
-            .eq("id", product.bottle_id)
-            .single();
+          const bottle = await fetchBottleById(product.bottle_id);
+          console.log("🍾 查询结果:", bottle);
           
-          console.log("🍾 查询结果:", data, error);
-          
-          if (!error && data?.img_url) {
-            setBottleImgUrl(data.img_url);
+          if (bottle?.img_url) {
+            setBottleImgUrl(bottle.img_url);
           }
         } catch (e) {
           console.error("🍾 查询瓶型图失败:", e);
         }
-      } else {
-        console.log("🍾 无法查询: supabase=", !!supabase, "bottle_id=", product?.bottle_id);
       }
     }
     fetchBottleImg();
