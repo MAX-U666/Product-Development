@@ -2,7 +2,7 @@
 // ✅ 完整版本 - 2026-01-26
 // 传统创建产品审核页面 - 完整展示所有创建时填写的字段
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   CheckCircle,
@@ -25,7 +25,7 @@ import {
   Palette,
   Beaker,
 } from "lucide-react";
-import { updateData } from "./api";
+import { updateData, supabase } from "./api";
 import { getCurrentBeijingISO, formatTime } from "./timeConfig";
 
 // ========== 工具函数 ==========
@@ -133,16 +133,40 @@ export default function ProductDetail({
 }) {
   const [reviewComment, setReviewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [bottleImgUrl, setBottleImgUrl] = useState(null);
+
+  // 查询瓶型图（如果只有 bottle_id 没有 bottle_img）
+  useEffect(() => {
+    async function fetchBottleImg() {
+      // 如果已有 bottle_img，直接用
+      if (product?.bottle_img) {
+        setBottleImgUrl(product.bottle_img);
+        return;
+      }
+      // 如果有 bottle_id，查询 bottles 表
+      if (product?.bottle_id && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from("bottles")
+            .select("img_url")
+            .eq("id", product.bottle_id)
+            .single();
+          if (!error && data?.img_url) {
+            setBottleImgUrl(data.img_url);
+          }
+        } catch (e) {
+          console.error("查询瓶型图失败:", e);
+        }
+      }
+    }
+    fetchBottleImg();
+  }, [product?.bottle_img, product?.bottle_id]);
 
   if (!product) return null;
 
-  // ========== 调试：打印产品对象所有字段 ==========
-  console.log("🔍 ProductDetail - product 对象:", product);
-  console.log("🔍 ProductDetail - 所有字段名:", Object.keys(product));
-
   // ========== 数据解析 ==========
-  // 瓶型图 - 数据库字段: bottle_img
-  const bottleImg = product.bottle_img;
+  // 瓶型图 - 使用 state 中查询到的 URL
+  const bottleImg = bottleImgUrl;
 
   // 参考包装图 - 数据库字段: ref_design_img (单张) 或 ref_packaging_url_1/2/3 (多张)
   const refImgsFromSlots = [
