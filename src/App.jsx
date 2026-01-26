@@ -1,14 +1,13 @@
 // File: src/App.jsx
-// ✅ 本次集成：
-// 1) 右上角新增「👤 管理员」下拉菜单（只对管理员显示）
-// 2) 下拉里进入「👥 用户管理」，不污染上方业务 Tab
-// 3) 新增 activeTab = 'users' 的渲染分支
-// 4) 点页面空白自动收起管理员菜单（体验更顺）
-// 5) 轻微优化 Header 右侧按钮布局与样式一致性
+// ✅ 在你原版基础上只新增：
+// - 👁 快速预览 AI草稿 + 开发瓶型/参考图（不影响原审核/接单功能）
+// - 引入 DraftReviewModal + fetchAIDraftById
+// - 新增 quickPreview 的 3 个 state + openQuickPreview 方法 + 底部 Modal 渲染
+// 其余保持你原逻辑不变
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles, ChevronDown } from 'lucide-react'
-import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api'
+import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api' // ✅ +fetchAIDraftById
 import Login from './Login'
 import Dashboard from './Dashboard'
 import ProductForm from './ProductForm'
@@ -18,7 +17,7 @@ import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
 import AIDraftDashboard from './AIDraftDashboard'
 import ProductDevEdit from './ProductDevEdit'
-import DraftReviewModal from './DraftReviewModal'
+import DraftReviewModal from './DraftReviewModal' // ✅ 新增：快速预览弹窗
 
 // ✅ 用户管理页（你需要新建 src/UserManagement.jsx）
 import UserManagement from './UserManagement'
@@ -36,7 +35,7 @@ export default function App() {
 
   const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
 
-  // ✅ 全部产品页：点👁快速预览（AI草稿 + 开发素材）
+  // ✅ 新增：快速预览（AI草稿 + 开发素材）
   const [quickPreviewOpen, setQuickPreviewOpen] = useState(false)
   const [quickPreviewDraft, setQuickPreviewDraft] = useState(null)
   const [quickPreviewProduct, setQuickPreviewProduct] = useState(null)
@@ -148,12 +147,16 @@ export default function App() {
     }
   }
 
-  // ✅ 全部产品页：点👁直接预览 AI 草稿 + 开发上传素材（瓶型/参考包装）
+  async function handleAICreateSuccess() {
+    await loadData()
+    await loadPendingDraftsCount()
+  }
+
+  // ✅ 新增：点👁 快速预览（优先弹 AI 草稿 + 开发素材）
   async function openQuickPreview(product) {
     const draftId = product?.created_from_draft_id
-
-    // 没有草稿ID：保持原逻辑 -> 打开产品详情
     if (!draftId) {
+      // 没有草稿ID：保持你原来的行为
       setSelectedProduct(product)
       return
     }
@@ -165,20 +168,14 @@ export default function App() {
         setSelectedProduct(product)
         return
       }
-
       setQuickPreviewProduct(product)
       setQuickPreviewDraft(d)
       setQuickPreviewOpen(true)
     } catch (e) {
+      console.error(e)
       alert('读取 AI 草稿失败：' + (e?.message || e))
       setSelectedProduct(product)
     }
-  }
-
-
-  async function handleAICreateSuccess() {
-    await loadData()
-    await loadPendingDraftsCount()
   }
 
   if (loading) {
@@ -467,9 +464,9 @@ export default function App() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <button
-                                onClick={() => openQuickPreview(product)}
+                                onClick={() => openQuickPreview(product)} // ✅ 改这里：点👁优先弹草稿预览
                                 className="text-blue-600 hover:text-blue-800 transition-colors"
-                                title="查看详情"
+                                title="查看详情/预览草稿"
                               >
                                 <Eye size={18} />
                               </button>
@@ -564,7 +561,7 @@ export default function App() {
         />
       )}
 
-      {/* ✅ 快速预览：AI草稿 + 开发素材（瓶型/参考包装） */}
+      {/* ✅ 新增：快速预览弹窗（不会影响原审核/接单功能） */}
       {quickPreviewOpen && quickPreviewDraft && (
         <DraftReviewModal
           draft={quickPreviewDraft}
@@ -577,7 +574,6 @@ export default function App() {
           }}
         />
       )}
-
     </div>
   )
 }
