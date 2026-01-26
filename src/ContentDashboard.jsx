@@ -272,17 +272,40 @@ function ContentTaskPage({ product, currentUser, onBack, onRefresh }) {
   )
 }
 
-/** 产品上下文面板：尽量把你之前阶段的字段都展示出来 */
+function safeDisplay(v) {
+  if (v === null || v === undefined) return '-'
+  if (typeof v === 'object') {
+    try {
+      return JSON.stringify(v, null, 2)
+    } catch {
+      return String(v)
+    }
+  }
+  const s = String(v).trim()
+  return s ? s : '-'
+}
+
+/** 产品上下文面板：统一展示字段（AI/传统都一样，只显示来源差异） */
 function ProductContextPanel({ product }) {
+  const sourceText =
+    (product.generate_provider || product.extract_provider) ? 'AI 创建（已审核）' : '人工创建'
+
   const rows = [
     ['开发月份', product.develop_month],
     ['阶段', product.stage ? `阶段${product.stage}` : '-'],
-    ['卖点', product.selling_point],
-    ['主概念', product.main_concept || product.mainConcept],
-    ['主要成分', product.ingredient || product.main_ingredient || product.mainIngredient],
-    ['主打功效', product.primary_benefit || product.primaryBenefit],
-    ['完整成分', product.full_ingredients || product.fullIngredients],
-    ['包装需求', product.packaging_requirements || product.packagingRequirements],
+    ['来源', sourceText],
+
+    // ✅ 统一字段（内容/设计只读这一套）
+    ['产品定位', product.positioning],
+    ['主打功效', product.efficacy],
+    ['完整成分', product.ingredients],
+    ['核心卖点', product.selling_point],
+    ['包装需求', product.packaging_requirements],
+    ['竞品分析', product.competitors_data],
+    ['定价建议', product.pricing],
+    ['最终标题', product.title],
+    ['SEO关键词', product.keywords],
+
     ['包装审核状态', product.package_review_status || '-'],
     ['内容审核状态', product.content_review_status || '-']
   ]
@@ -298,9 +321,12 @@ function ProductContextPanel({ product }) {
   return (
     <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
       <div className="p-5 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <Package size={18} className="text-blue-600" />
-          <h3 className="font-bold text-gray-800">产品上下文信息</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Package size={18} className="text-blue-600" />
+            <h3 className="font-bold text-gray-800">产品上下文信息</h3>
+          </div>
+          <span className="text-xs text-gray-400">来源：{sourceText}</span>
         </div>
         <p className="text-xs text-gray-500 mt-1">
           开发/设计阶段的信息在这里，内容人员不用到处翻。
@@ -313,7 +339,7 @@ function ProductContextPanel({ product }) {
             <div key={k} className="text-sm">
               <div className="text-gray-500">{k}</div>
               <div className="text-gray-800 whitespace-pre-wrap break-words">
-                {v && String(v).trim() ? String(v) : '-'}
+                {safeDisplay(v)}
               </div>
             </div>
           ))}
@@ -363,24 +389,29 @@ function ProductContextPanel({ product }) {
   )
 }
 
+function parseCompetitorsData(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  try { return JSON.parse(raw) } catch { return null }
+}
+
 // 第一次提交表单（填写内容+上传图片）
 function FirstSubmitForm({ product, currentUser, onBack, onSuccess }) {
   const [loading, setLoading] = useState(false)
 
-  // 竞品分析
+  // ✅ 竞品分析：统一从 competitors_data 读取（可能是 json / text）
+  const cd = parseCompetitorsData(product.competitors_data)
+
   const [competitors, setCompetitors] = useState(() => {
-    const ca = product.competitor_analysis
-    if (ca?.competitors?.length === 3) return ca.competitors
+    if (cd?.competitors?.length === 3) return cd.competitors
     return [
       { selling_point: '', price: '', rating: '', sales_volume: '' },
       { selling_point: '', price: '', rating: '', sales_volume: '' },
       { selling_point: '', price: '', rating: '', sales_volume: '' }
     ]
   })
-  const [differentiation, setDifferentiation] = useState(
-    product.competitor_analysis?.differentiation || ''
-  )
-  const [pricing, setPricing] = useState(product.competitor_analysis?.pricing || '')
+  const [differentiation, setDifferentiation] = useState(cd?.differentiation || '')
+  const [pricing, setPricing] = useState(cd?.pricing || product.pricing || '')
 
   // 产品内容
   const [manualTitle, setManualTitle] = useState(product.manual_title || '')
@@ -483,11 +514,14 @@ function FirstSubmitForm({ product, currentUser, onBack, onSuccess }) {
     setLoading(true)
     try {
       await updateData('products', product.id, {
-        competitor_analysis: {
+        // ✅ 统一写入 competitors_data + pricing
+        competitors_data: {
           competitors,
           differentiation,
           pricing
         },
+        pricing,
+
         manual_title: manualTitle,
         manual_bullet_points: bulletPoints,
         manual_description: manualDescription,
@@ -516,11 +550,14 @@ function FirstSubmitForm({ product, currentUser, onBack, onSuccess }) {
     setLoading(true)
     try {
       await updateData('products', product.id, {
-        competitor_analysis: {
+        // ✅ 统一写入 competitors_data + pricing
+        competitors_data: {
           competitors,
           differentiation,
           pricing
         },
+        pricing,
+
         manual_title: manualTitle,
         manual_bullet_points: bulletPoints,
         manual_description: manualDescription,
@@ -528,6 +565,7 @@ function FirstSubmitForm({ product, currentUser, onBack, onSuccess }) {
         image_sets_uploaded: imageSets,
         selected_images_by_content: selectedImages,
         image_notes: imageNotes,
+
         content_first_submit_time: getCurrentBeijingISO(),
         content_review_status: 'pending',
         stage: 5
