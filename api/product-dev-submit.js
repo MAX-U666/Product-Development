@@ -9,6 +9,26 @@
  * 
  * 成功后：stage=1, dev_assets_status='待复审', status='待管理员复审'。管理员审核通过后进入 stage=2（待接单）
  */
+// 提交产品数据时，判断是AI流程还是传统流程，状态和审核条件不同
+const submitProductForReview = async (productId, isAI = false) => {
+  const productData = {
+    productId,
+    stage: isAI ? 'AI_draft_approved' : 'admin_review', // AI流程通过草稿审核后推进到 AI_draft_approved
+    status: '待审核',
+    dev_assets_status: isAI ? '待复审' : '待审核', // 根据流程不同，状态不同
+  };
+
+  try {
+    const response = await api.submitForReview(productData);
+    if (response.success) {
+      alert('产品审核提交成功');
+    } else {
+      alert('提交失败，请稍后重试');
+    }
+  } catch (error) {
+    console.error('提交产品审核失败', error);
+  }
+};
 
 import { createClient } from "@supabase/supabase-js";
 
