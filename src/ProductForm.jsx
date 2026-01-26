@@ -379,7 +379,8 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
         bottle_id: selectedBottle?.id ?? null,
 
         stage: 1,
-        status: '进行中',
+        status: '待审核',
+        dev_assets_status: '待复审',
         developer_id: currentUser.id,
         develop_start_time: beijingTimeNow,
         develop_submit_time: beijingTimeNow,
@@ -471,7 +472,7 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
           package_designer_id: null,
           package_design_url: null,
           package_design_time: null,
-          package_review_status: 'pending',
+          package_review_status: null,
           package_review_note: null,
           review_history: []
         }
