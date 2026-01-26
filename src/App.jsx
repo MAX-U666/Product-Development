@@ -1,12 +1,13 @@
 // File: src/App.jsx
-// ✅ 修改点：
-// 1. 导入 ProductDevEdit 组件
-// 2. 添加 selectedDevProduct 状态
-// 3. 在产品列表中添加【继续编辑】按钮（AI 产品 + stage=1）
-// 4. 添加 ProductDevEdit 弹窗
+// ✅ 本次集成：
+// 1) 右上角新增「👤 管理员」下拉菜单（只对管理员显示）
+// 2) 下拉里进入「👥 用户管理」，不污染上方业务 Tab
+// 3) 新增 activeTab = 'users' 的渲染分支
+// 4) 点页面空白自动收起管理员菜单（体验更顺）
+// 5) 轻微优化 Header 右侧按钮布局与样式一致性
 
-import React, { useState, useEffect } from 'react'
-import { Package, LogOut, Plus, Eye, Trash2, Sparkles } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Package, LogOut, Plus, Eye, Trash2, Sparkles, ChevronDown } from 'lucide-react'
 import { fetchData, deleteData, fetchAIDrafts } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
@@ -16,7 +17,10 @@ import ProductDetail from './ProductDetail'
 import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
 import AIDraftDashboard from './AIDraftDashboard'
-import ProductDevEdit from './ProductDevEdit'  // ✅ 1. 导入组件
+import ProductDevEdit from './ProductDevEdit'
+
+// ✅ 用户管理页（你需要新建 src/UserManagement.jsx）
+import UserManagement from './UserManagement'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -26,10 +30,14 @@ export default function App() {
   const [showProductForm, setShowProductForm] = useState(false)
   const [showProductFormAI, setShowProductFormAI] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
-  const [selectedDevProduct, setSelectedDevProduct] = useState(null)  // ✅ 2. 添加状态
+  const [selectedDevProduct, setSelectedDevProduct] = useState(null) // ✅ 产品开发编辑
   const [loading, setLoading] = useState(true)
-  
+
   const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
+
+  // ✅ 管理员下拉菜单
+  const [showAdminMenu, setShowAdminMenu] = useState(false)
+  const adminMenuRef = useRef(null)
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser')
@@ -54,16 +62,28 @@ export default function App() {
     loadData()
   }, [])
 
+  // ✅ 点击空白关闭管理员菜单
+  useEffect(() => {
+    function onDocClick(e) {
+      if (!showAdminMenu) return
+      if (adminMenuRef.current && !adminMenuRef.current.contains(e.target)) {
+        setShowAdminMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [showAdminMenu])
+
   async function loadData() {
     setLoading(true)
     try {
       const [usersData, productsData] = await Promise.all([
-        fetchData('users'), 
-        fetchData('products')
+        fetchData('users'),
+        fetchData('products'),
       ])
       setUsers(usersData || [])
       setProducts(productsData || [])
-      
+
       await loadPendingDraftsCount()
     } catch (error) {
       console.error('加载失败:', error)
@@ -142,11 +162,15 @@ export default function App() {
     return <Login users={users} onLogin={handleLogin} />
   }
 
+  const isAdmin = currentUser.role === '管理员'
+  const canDev = currentUser.role === '管理员' || currentUser.role === '开发人员'
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="px-6 py-4">
           <div className="flex justify-between items-center">
+            {/* 左：Logo + 标题 */}
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg">
                 <Package className="text-white" size={24} />
@@ -159,14 +183,15 @@ export default function App() {
               </div>
             </div>
 
+            {/* 右：动作按钮 */}
             <div className="flex items-center gap-3">
-              {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+              {canDev && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowProductForm(true)}
-                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:shadow transition-all flex items-center gap-2"
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:shadow transition-all flex items-center gap-2"
                   >
-                    <Plus size={20} />
+                    <Plus size={18} />
                     传统创建
                   </button>
 
@@ -174,9 +199,46 @@ export default function App() {
                     onClick={() => setShowProductFormAI(true)}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
                   >
-                    <Sparkles size={20} />
+                    <Sparkles size={18} />
                     🤖 AI 创建
                   </button>
+                </div>
+              )}
+
+              {/* ✅ 管理员下拉入口（只管理员看得到） */}
+              {isAdmin && (
+                <div className="relative" ref={adminMenuRef}>
+                  <button
+                    onClick={() => setShowAdminMenu(v => !v)}
+                    className="px-4 py-2 text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-all flex items-center gap-2"
+                    title="系统管理"
+                  >
+                    👤 管理员
+                    <ChevronDown size={16} className={`${showAdminMenu ? 'rotate-180' : ''} transition-transform`} />
+                  </button>
+
+                  {showAdminMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
+                      <button
+                        onClick={() => {
+                          setActiveTab('users')
+                          setShowAdminMenu(false)
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-50 text-gray-700"
+                      >
+                        👥 用户管理
+                      </button>
+
+                      <div className="h-px bg-gray-100" />
+
+                      <button
+                        onClick={() => setShowAdminMenu(false)}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-50 text-gray-500"
+                      >
+                        关闭
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -184,7 +246,7 @@ export default function App() {
                 onClick={handleLogout}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all flex items-center gap-2"
               >
-                <LogOut size={20} />
+                <LogOut size={18} />
                 退出
               </button>
             </div>
@@ -192,7 +254,7 @@ export default function App() {
         </div>
       </nav>
 
-      {/* 标签导航 */}
+      {/* 标签导航（业务区，不放用户管理） */}
       <div className="bg-white border-b border-gray-200 px-6">
         <div className="flex gap-2">
           <button
@@ -217,7 +279,7 @@ export default function App() {
             📦 全部产品
           </button>
 
-          {(currentUser.role === '设计师' || currentUser.role === '管理员') && (
+          {(currentUser.role === '设计师' || isAdmin) && (
             <button
               onClick={() => setActiveTab('designer')}
               className={`px-4 py-3 border-b-2 transition-colors ${
@@ -230,20 +292,20 @@ export default function App() {
             </button>
           )}
 
-          {(currentUser.role === '内容人员' || currentUser.role === '管理员') && (
+          {(currentUser.role === '内容人员' || isAdmin) && (
             <button
               onClick={() => setActiveTab('content')}
               className={`px-4 py-3 border-b-2 transition-colors ${
                 activeTab === 'content'
                   ? 'border-blue-600 text-blue-600 font-medium'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
-            }`}
+              }`}
             >
               ✍️ 内容策划
             </button>
           )}
 
-          {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+          {canDev && (
             <button
               onClick={() => setActiveTab('ai_drafts')}
               className={`px-4 py-3 border-b-2 transition-colors relative ${
@@ -277,11 +339,11 @@ export default function App() {
                 <Package className="mx-auto text-gray-300 mb-4" size={64} />
                 <p className="text-gray-500 mb-4">暂无产品数据</p>
 
-                {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+                {canDev && (
                   <div className="flex items-center justify-center gap-2">
                     <button
                       onClick={() => setShowProductForm(true)}
-                      className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+                      className="px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
                     >
                       <Plus size={18} />
                       传统创建
@@ -311,6 +373,7 @@ export default function App() {
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase">操作</th>
                     </tr>
                   </thead>
+
                   <tbody className="divide-y divide-gray-200">
                     {products.map(product => {
                       let currentOwner = '-'
@@ -332,7 +395,6 @@ export default function App() {
                           <td className="px-6 py-4 text-sm font-medium text-gray-800">
                             <div className="flex items-center gap-2">
                               {product.category || '未命名'}
-                              {/* ✅ 3. AI 标签 */}
                               {product.is_ai_generated && (
                                 <span className="rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-bold text-white">
                                   🤖 AI
@@ -340,12 +402,15 @@ export default function App() {
                               )}
                             </div>
                           </td>
+
                           <td className="px-6 py-4 text-sm text-gray-600">{product.develop_month}</td>
+
                           <td className="px-6 py-4">
                             <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
                               阶段{product.stage}
                             </span>
                           </td>
+
                           <td className="px-6 py-4">
                             <span
                               className={`px-3 py-1 rounded-full text-xs ${
@@ -361,6 +426,7 @@ export default function App() {
                               {product.status}
                             </span>
                           </td>
+
                           <td className="px-6 py-4 text-sm text-gray-600">{currentOwner}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{product.order_count || 0}单</td>
 
@@ -374,7 +440,6 @@ export default function App() {
                                 <Eye size={18} />
                               </button>
 
-                              {/* ✅ 4. 添加【继续编辑】按钮（AI 产品 + stage=1） */}
                               {product.is_ai_generated && product.stage === 1 && (
                                 <button
                                   onClick={() => setSelectedDevProduct(product)}
@@ -385,7 +450,7 @@ export default function App() {
                                 </button>
                               )}
 
-                              {(currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+                              {canDev && (
                                 <button
                                   onClick={() => handleDeleteProduct(product)}
                                   className="text-red-600 hover:text-red-800 transition-colors"
@@ -406,31 +471,40 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'designer' && (currentUser.role === '设计师' || currentUser.role === '管理员') && (
+        {activeTab === 'designer' && (currentUser.role === '设计师' || isAdmin) && (
           <DesignerDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
 
-        {activeTab === 'content' && (currentUser.role === '内容人员' || currentUser.role === '管理员') && (
+        {activeTab === 'content' && (currentUser.role === '内容人员' || isAdmin) && (
           <ContentDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
 
-        {activeTab === 'ai_drafts' && (currentUser.role === '管理员' || currentUser.role === '开发人员') && (
+        {activeTab === 'ai_drafts' && canDev && (
           <AIDraftDashboard
             currentUser={currentUser}
             onCreateProduct={() => setShowProductFormAI(true)}
             onRefresh={loadPendingDraftsCount}
           />
         )}
+
+        {/* ✅ 用户管理：不出现在业务 Tab，只从右上角管理员菜单进入 */}
+        {activeTab === 'users' && isAdmin && (
+          <UserManagement currentUser={currentUser} />
+        )}
       </div>
 
       {showProductForm && (
-        <ProductForm currentUser={currentUser} onClose={() => setShowProductForm(false)} onSuccess={loadData} />
+        <ProductForm
+          currentUser={currentUser}
+          onClose={() => setShowProductForm(false)}
+          onSuccess={loadData}
+        />
       )}
 
       {showProductFormAI && (
-        <ProductFormAI 
-          currentUser={currentUser} 
-          onClose={() => setShowProductFormAI(false)} 
+        <ProductFormAI
+          currentUser={currentUser}
+          onClose={() => setShowProductFormAI(false)}
           onSuccess={handleAICreateSuccess}
         />
       )}
@@ -445,7 +519,6 @@ export default function App() {
         />
       )}
 
-      {/* ✅ 5. 添加产品开发编辑弹窗 */}
       {selectedDevProduct && (
         <ProductDevEdit
           product={selectedDevProduct}
