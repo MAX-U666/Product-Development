@@ -1,33 +1,228 @@
 import React, { useState, useMemo } from 'react'
-import { Package, Upload, CheckCircle, Clock, AlertCircle, Eye } from 'lucide-react'
+import { Package, Upload, CheckCircle, Clock, AlertCircle, Eye, X, Image, FileText } from 'lucide-react'
 import { updateData, uploadImage, fetchAIDraftById } from './api'
 import { formatTime, getCurrentBeijingISO } from './timeConfig'
 import DraftReviewModal from './DraftReviewModal'
-// 修改设计部待接单的产品过滤条件
-const filterProductsForDesigner = (products) => {
-  return products.filter(product => {
-    // AI流程和传统流程分开，只有stage = 2 且 status = "待接单" 的产品才可以接单
-    return product.stage === 'AI_draft_approved' || (product.stage === 'product_created' && product.status === '待审核');
-  });
-};
 
-const showReviewButton = (product) => {
-  if (product.stage === 'product_created' && product.status === '待审核') {
-    return true;
-  }
-  return false;
-};
-
-
-
-
-// ✅ 状态机常量（推荐）
+// ✅ 状态机常量
 const REVIEW_STATUS = {
-  NONE: null,              // 未开始
-  DESIGNING: 'designing',  // 设计中（已接单）
-  PENDING: 'pending',      // 待审核（已提交）
-  APPROVED: 'approved',    // 已通过
-  REJECTED: 'rejected'     // 需修改
+  NONE: null,
+  DESIGNING: 'designing',
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected'
+}
+
+// ✅ 新增：传统创建内容预览弹窗
+function TraditionalContentModal({ product, onClose }) {
+  if (!product) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* 头部 */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-700 to-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+              <FileText className="text-white" size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">传统创建内容预览</h2>
+              <p className="text-sm text-gray-300">{product.category || '未命名产品'}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+          >
+            <X className="text-white" size={20} />
+          </button>
+        </div>
+
+        {/* 内容区域 */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* 基本信息 */}
+          <div className="bg-gray-50 rounded-xl p-5">
+            <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              📋 基本信息
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-500">产品名称：</span>
+                <span className="text-gray-800 font-medium">{product.category || '-'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">开发月份：</span>
+                <span className="text-gray-800 font-medium">{product.develop_month || '-'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">产品类型：</span>
+                <span className="text-gray-800 font-medium">{product.product_type || '-'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">目标市场：</span>
+                <span className="text-gray-800 font-medium">{product.target_market || '-'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">创建时间：</span>
+                <span className="text-gray-800 font-medium">{formatTime(product.created_at)}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">当前状态：</span>
+                <span className="text-gray-800 font-medium">{product.status || '-'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 卖点描述 */}
+          {product.selling_point && (
+            <div className="bg-blue-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                💡 卖点描述
+              </h3>
+              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {product.selling_point}
+              </p>
+            </div>
+          )}
+
+          {/* 设计要求/备注 */}
+          {product.design_requirements && (
+            <div className="bg-purple-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                🎨 设计要求
+              </h3>
+              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {product.design_requirements}
+              </p>
+            </div>
+          )}
+
+          {/* 备注 */}
+          {product.notes && (
+            <div className="bg-yellow-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                📝 备注信息
+              </h3>
+              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {product.notes}
+              </p>
+            </div>
+          )}
+
+          {/* 参考图片 */}
+          <div className="bg-green-50 rounded-xl p-5">
+            <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              🖼️ 参考图片/设计素材
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              {/* 参考图1 */}
+              {product.reference_image_url ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">参考图片 1</p>
+                  <img
+                    src={product.reference_image_url}
+                    alt="参考图1"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(product.reference_image_url, '_blank')}
+                  />
+                </div>
+              ) : null}
+
+              {/* 参考图2 */}
+              {product.reference_image_url_2 ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">参考图片 2</p>
+                  <img
+                    src={product.reference_image_url_2}
+                    alt="参考图2"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(product.reference_image_url_2, '_blank')}
+                  />
+                </div>
+              ) : null}
+
+              {/* 瓶型图 */}
+              {product.bottle_image_url ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">瓶型图</p>
+                  <img
+                    src={product.bottle_image_url}
+                    alt="瓶型图"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(product.bottle_image_url, '_blank')}
+                  />
+                </div>
+              ) : null}
+
+              {/* 包装参考图 */}
+              {product.package_reference_url ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">包装参考图</p>
+                  <img
+                    src={product.package_reference_url}
+                    alt="包装参考图"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(product.package_reference_url, '_blank')}
+                  />
+                </div>
+              ) : null}
+
+              {/* 开发上传的瓶型图 */}
+              {product.dev_bottle_image_url ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">开发瓶型图</p>
+                  <img
+                    src={product.dev_bottle_image_url}
+                    alt="开发瓶型图"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(product.dev_bottle_image_url, '_blank')}
+                  />
+                </div>
+              ) : null}
+
+              {/* 开发上传的参考包装图 */}
+              {product.dev_package_reference_url ? (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">开发参考包装图</p>
+                  <img
+                    src={product.dev_package_reference_url}
+                    alt="开发参考包装图"
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => window.open(product.dev_package_reference_url, '_blank')}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {/* 没有任何图片时的提示 */}
+            {!product.reference_image_url && 
+             !product.reference_image_url_2 && 
+             !product.bottle_image_url && 
+             !product.package_reference_url &&
+             !product.dev_bottle_image_url &&
+             !product.dev_package_reference_url && (
+              <div className="text-center py-8 text-gray-400">
+                <Image className="mx-auto mb-2" size={40} />
+                <p>暂无参考图片</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 底部 */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function DesignerDashboard({ products = [], currentUser, onRefresh }) {
@@ -41,6 +236,11 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
   const [draftLoading, setDraftLoading] = useState(false)
   const [draftProduct, setDraftProduct] = useState(null)
 
+  // ✅ 新增：传统创建内容预览
+  const [traditionalModalOpen, setTraditionalModalOpen] = useState(false)
+  const [traditionalProduct, setTraditionalProduct] = useState(null)
+
+  // ✅ 打开 AI 草稿预览
   const openAIDraft = async (product) => {
     const draftId = product?.created_from_draft_id
     if (!draftId) {
@@ -56,7 +256,6 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
         return
       }
       setActiveDraft(d)
-      // ✅ 关键：把产品一起传给 modal，用于展示开发上传的瓶型/参考包装
       setDraftProduct(product)
       setDraftModalOpen(true)
     } catch (e) {
@@ -66,7 +265,24 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
     }
   }
 
-  // 待接单：阶段1 且 没有设计师
+  // ✅ 新增：打开传统创建内容预览
+  const openTraditionalContent = (product) => {
+    setTraditionalProduct(product)
+    setTraditionalModalOpen(true)
+  }
+
+  // ✅ 智能预览：根据是否AI创建决定打开哪个弹窗
+  const handlePreview = (product) => {
+    if (product.is_ai_generated && product.created_from_draft_id) {
+      // AI 创建的产品 → 打开 AI 草稿预览
+      openAIDraft(product)
+    } else {
+      // 传统创建的产品 → 打开传统内容预览
+      openTraditionalContent(product)
+    }
+  }
+
+  // 待接单：阶段2 且 没有设计师
   const pendingProducts = useMemo(() => {
     return products.filter((p) => p.stage === 2 && p.status === '待接单' && !p.package_designer_id)
   }, [products])
@@ -138,7 +354,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
     }
   }
 
-  // 提交审核：stage=3 且 pending
+  // 提交审核
   async function handleSubmitReview(product) {
     if (!product.package_design_url) {
       alert('请先上传设计稿')
@@ -218,8 +434,13 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-800 text-lg">
+                    <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2">
                       {product.category || '未命名产品'}
+                      {product.is_ai_generated && (
+                        <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-xs rounded-full">
+                          🤖 AI
+                        </span>
+                      )}
                     </h4>
                     <div className="text-sm text-gray-600 mt-2 space-y-1">
                       <p>📅 开发月份：{product.develop_month || '-'}</p>
@@ -265,6 +486,9 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
               const isDesigning = status === REVIEW_STATUS.DESIGNING || product.stage === 2
               const isApproved = status === REVIEW_STATUS.APPROVED
 
+              // ✅ 判断是 AI 创建还是传统创建
+              const isAIProduct = product.is_ai_generated && product.created_from_draft_id
+
               return (
                 <div
                   key={product.id}
@@ -281,8 +505,13 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                   {/* 产品信息 */}
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h4 className="font-bold text-gray-800 text-lg">
+                      <h4 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                         {product.category || '未命名产品'}
+                        {isAIProduct && (
+                          <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-xs rounded-full">
+                            🤖 AI
+                          </span>
+                        )}
                       </h4>
                       <div className="text-sm text-gray-600 mt-2 space-y-1">
                         <p>📅 开发月份：{product.develop_month}</p>
@@ -367,14 +596,18 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                   {/* 操作区：审核中禁止操作 */}
                   {!isPending && (
                     <div className="border-t border-gray-200 pt-4">
-                      {/* ✅ 查看AI草稿按钮：放在上传设计稿上方 */}
+                      {/* ✅ 根据产品类型显示不同的预览按钮 */}
                       <div className="mb-3 flex justify-end">
                         <button
-                          onClick={() => openAIDraft(product)}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm"
+                          onClick={() => handlePreview(product)}
+                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-colors ${
+                            isAIProduct
+                              ? 'border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700'
+                              : 'border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700'
+                          }`}
                         >
                           <Eye className="w-4 h-4" />
-                          {draftLoading ? '加载中…' : '查看AI草稿'}
+                          {draftLoading ? '加载中…' : isAIProduct ? '查看AI草稿' : '查看创建内容'}
                         </button>
                       </div>
 
@@ -412,7 +645,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                           </button>
                         )}
 
-                        {/* 提交审核：有设计稿才允许 */}
+                        {/* 提交审核 */}
                         {hasDesign && (
                           <button
                             onClick={() => handleSubmitReview(product)}
@@ -449,6 +682,17 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
           product={draftProduct}
           mode="view"
           onClose={() => setDraftModalOpen(false)}
+        />
+      )}
+
+      {/* ✅ 新增：传统创建内容预览 Modal */}
+      {traditionalModalOpen && traditionalProduct && (
+        <TraditionalContentModal
+          product={traditionalProduct}
+          onClose={() => {
+            setTraditionalModalOpen(false)
+            setTraditionalProduct(null)
+          }}
         />
       )}
     </div>
