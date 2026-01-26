@@ -23,6 +23,25 @@ function safeOpen(url) {
   }
   window.open(u, "_blank", "noopener,noreferrer");
 }
+// 草稿创建后，默认进入待审核状态，AI流程和传统流程状态不同
+const handleDraftSubmit = async (isAI) => {
+  const draftData = {
+    stage: isAI ? 'AI_draft_created' : 'product_created', // 根据流程状态进行区分
+    status: '待审核',
+    ai_generated: isAI,
+  };
+
+  try {
+    const response = await api.submitDraft(draftData);
+    if (response.success) {
+      alert('草稿提交成功，等待审核');
+    } else {
+      alert('草稿提交失败，请重试');
+    }
+  } catch (error) {
+    console.error('草稿提交出错', error);
+  }
+};
 
 function normalizeImageList(maybe) {
   if (!maybe) return [];
