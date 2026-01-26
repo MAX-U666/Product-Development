@@ -136,42 +136,45 @@ export default function ProductDetail({
 
   if (!product) return null;
 
-  // ========== 数据解析 ==========
-  // 瓶型图
-  const bottleImg =
-    product.bottle_img ||
-    product.bottle_image_url ||
-    product.bottle_img_url ||
-    null;
+  // ========== 调试：打印产品对象所有字段 ==========
+  console.log("🔍 ProductDetail - product 对象:", product);
+  console.log("🔍 ProductDetail - 所有字段名:", Object.keys(product));
 
-  // 参考包装图
+  // ========== 数据解析 ==========
+  // 瓶型图 - 数据库字段: bottle_img
+  const bottleImg = product.bottle_img;
+
+  // 参考包装图 - 数据库字段: ref_design_img (单张) 或 ref_packaging_url_1/2/3 (多张)
   const refImgsFromSlots = [
     product.ref_packaging_url_1,
     product.ref_packaging_url_2,
     product.ref_packaging_url_3,
   ].filter(Boolean);
 
+  // 如果没有分开的字段，尝试用 ref_design_img
   const refImgs =
     refImgsFromSlots.length > 0
       ? refImgsFromSlots
-      : normalizeImageList(product.ref_packaging_images);
+      : product.ref_design_img 
+        ? [product.ref_design_img] 
+        : [];
 
   // 包装设计稿
   const packageDesignUrl = product.package_design_url;
 
-  // 竞品数据（3组链接+图片）
+  // 竞品数据（3组链接+图片）- 数据库字段: competitor_1_url, competitor_1_img
   const competitors = [
     { 
-      link: product.competitor_link_1 || product.competitor_url_1, 
-      img: product.competitor_img_1 || product.competitor_image_1 
+      link: product.competitor_1_url, 
+      img: product.competitor_1_img 
     },
     { 
-      link: product.competitor_link_2 || product.competitor_url_2, 
-      img: product.competitor_img_2 || product.competitor_image_2 
+      link: product.competitor_2_url, 
+      img: product.competitor_2_img 
     },
     { 
-      link: product.competitor_link_3 || product.competitor_url_3, 
-      img: product.competitor_img_3 || product.competitor_image_3 
+      link: product.competitor_3_url, 
+      img: product.competitor_3_img 
     },
   ];
 
@@ -398,21 +401,21 @@ export default function ProductDetail({
           <SectionCard icon={FileText} title="基础信息">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <FieldItem label="开发月份 *" value={product.develop_month} />
-              <FieldItem label="开发时间" value={product.develop_date || formatTime(product.created_at)?.split(' ')[0]} />
+              <FieldItem label="开发时间" value={product.develop_time} />
               <FieldItem label="开发品类 *" value={product.category} />
-              <FieldItem label="赛道" value={product.track || product.channel} />
-              <FieldItem label="目标市场" value={product.market} />
-              <FieldItem label="目标平台" value={product.platform} />
+              <FieldItem label="赛道" value={product.track} />
+              <FieldItem label="目标市场" value={product.target_market || product.market} />
+              <FieldItem label="目标平台" value={product.target_platform || product.platform} />
             </div>
           </SectionCard>
 
           {/* ========== 2. 产品规格 ========== */}
           <SectionCard icon={Droplet} title="产品规格">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <FieldItem label="料体颜色" value={product.texture_color || product.color} />
-              <FieldItem label="容量" value={product.volume} />
-              <FieldItem label="香味" value={product.scent} />
-              <FieldItem label="价格" value={product.pricing || product.price} />
+              <FieldItem label="料体颜色" value={product.material_color || product.texture_color} />
+              <FieldItem label="容量" value={product.capacity || product.volume} />
+              <FieldItem label="香味" value={product.fragrance || product.scent} />
+              <FieldItem label="价格" value={product.price || product.pricing} />
             </div>
           </SectionCard>
 
@@ -420,10 +423,10 @@ export default function ProductDetail({
           <SectionCard icon={Sparkles} title="产品卖点">
             <div className="grid gap-4 sm:grid-cols-2">
               <FieldItem label="卖点 *" value={product.selling_point} fullWidth />
-              <FieldItem label="主概念" value={product.positioning || product.concept} />
-              <FieldItem label="主要成分" value={product.ingredients} />
-              <FieldItem label="主打功效" value={product.main_efficacy || product.efficacy} />
-              <FieldItem label="完整成分" value={product.full_ingredients} />
+              <FieldItem label="主概念" value={product.main_concept || product.positioning} />
+              <FieldItem label="主要成分" value={product.ingredient || product.ingredients} />
+              <FieldItem label="主打功效" value={product.primary_benefit || product.main_efficacy} />
+              <FieldItem label="完整成分" value={product.ingredients} />
             </div>
           </SectionCard>
 
