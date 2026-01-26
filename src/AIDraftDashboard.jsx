@@ -169,7 +169,7 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
           draft={activeDraft}
           currentUser={currentUser}
           onClose={() => setActiveDraft(null)}
-          onReviewed={handleReviewed}
+          onSuccess={handleReviewed}
         />
       )}
     </div>
