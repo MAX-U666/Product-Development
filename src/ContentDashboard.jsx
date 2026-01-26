@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Package, CheckCircle, Clock, X, Upload, Image as ImageIcon, Eye } from 'lucide-react'
 import { updateData, uploadImage } from './api'
 import { formatTime, getCurrentBeijingISO } from './timeConfig'
@@ -18,17 +18,33 @@ const IMAGE_TYPES = [
 
 export default function ContentDashboard({ products = [], currentUser, onRefresh }) {
   const [selectedProduct, setSelectedProduct] = useState(null)
+  // ✅ 新增：本地记录已接单的产品ID，确保立即从待接单列表移除
+  const [acceptedIds, setAcceptedIds] = useState([])
 
-  // 待接单的产品（包装审核通过，stage=4）
+  // 待接单的产品（包装审核通过，stage=4，且未被接单）
+  // ✅ 增加 acceptedIds 过滤，确保接单后立即移除
   const pendingProducts = useMemo(() => {
-    return products.filter(p => p.stage === 4 && !p.content_creator_id)
-  }, [products])
+    return products.filter(p => 
+      p.stage === 4 && 
+      !p.content_creator_id && 
+      !acceptedIds.includes(p.id)
+    )
+  }, [products, acceptedIds])
 
   // 我的任务
   const myTasks = useMemo(() => {
     return products.filter(
-      p => p.content_creator_id === currentUser.id && p.stage >= 4 && p.stage <= 6
+      p => (p.content_creator_id === currentUser.id || acceptedIds.includes(p.id)) && 
+           p.stage >= 4 && 
+           p.stage <= 6
     )
+  }, [products, currentUser.id, acceptedIds])
+
+  // 已完成数量
+  const completedCount = useMemo(() => {
+    return products.filter(
+      p => p.content_creator_id === currentUser.id && p.translation_complete
+    ).length
   }, [products, currentUser.id])
 
   // 接单
@@ -41,6 +57,9 @@ export default function ContentDashboard({ products = [], currentUser, onRefresh
         content_start_time: getCurrentBeijingISO()
       })
 
+      // ✅ 立即添加到已接单列表，确保UI即时更新
+      setAcceptedIds(prev => [...prev, product.id])
+
       alert('✅ 接单成功！')
       onRefresh?.()
     } catch (error) {
@@ -48,7 +67,7 @@ export default function ContentDashboard({ products = [], currentUser, onRefresh
     }
   }
 
-  // ✅ 不是弹窗：点击“开始填写/补充翻译”后进入同一 SPA 的“全屏编辑页”
+  // ✅ 不是弹窗：点击"开始填写/补充翻译"后进入同一 SPA 的"全屏编辑页"
   if (selectedProduct) {
     return (
       <ContentTaskPage
@@ -90,13 +109,7 @@ export default function ContentDashboard({ products = [], currentUser, onRefresh
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">已完成</p>
-              <p className="text-3xl font-bold mt-1">
-                {
-                  products.filter(
-                    p => p.content_creator_id === currentUser.id && p.translation_complete
-                  ).length
-                }
-              </p>
+              <p className="text-3xl font-bold mt-1">{completedCount}</p>
             </div>
             <CheckCircle size={40} className="opacity-50" />
           </div>
@@ -124,8 +137,13 @@ export default function ContentDashboard({ products = [], currentUser, onRefresh
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-800 text-lg">
+                    <h4 className="font-semibold text-gray-800 text-lg flex items-center gap-2">
                       {product.category || '未命名产品'}
+                      {product.is_ai_generated && (
+                        <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-xs rounded-full">
+                          🤖 AI
+                        </span>
+                      )}
                     </h4>
                     <div className="text-sm text-gray-600 mt-2 space-y-1">
                       <p>📅 开发月份：{product.develop_month || '-'}</p>
@@ -168,8 +186,13 @@ export default function ContentDashboard({ products = [], currentUser, onRefresh
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h4 className="font-bold text-gray-800 text-lg">
+                    <h4 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                       {product.category || '未命名产品'}
+                      {product.is_ai_generated && (
+                        <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-xs rounded-full">
+                          🤖 AI
+                        </span>
+                      )}
                     </h4>
                     <div className="text-sm text-gray-600 mt-2 space-y-1">
                       <p>📅 开发月份：{product.develop_month}</p>
@@ -485,7 +508,7 @@ function FirstSubmitForm({ product, currentUser, onBack, onSuccess }) {
       }
       // 保证数组长度为9（按类型顺序）
       const filled = IMAGE_TYPES.map((_, i) => next[i]).filter(Boolean)
-      // 这里保持“按类型顺序固定”，后续再做拖拽排序
+      // 这里保持"按类型顺序固定"，后续再做拖拽排序
       return filled.length === 9 ? IMAGE_TYPES.map((_, i) => next[i]) : next
     })
   }
