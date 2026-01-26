@@ -2,6 +2,16 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { X, ExternalLink, Image as ImageIcon, Link as LinkIcon, Package, Trash2, CheckCircle, XCircle, Eye } from 'lucide-react'
 import { fetchData, deleteProduct, updateData, fetchAIDraftById } from './api'
 import { formatTime, getCurrentBeijingISO } from './timeConfig'
+// 根据产品的创建流程，显示不同的审核状态
+const renderProductStatus = (product) => {
+  if (product.stage === 'AI_draft_approved') {
+    return <div>AI草稿已审核通过，等待开发上传参考设计。</div>;
+  } else if (product.stage === 'product_created' && product.status === '待审核') {
+    return <div>待管理员审核。</div>;
+  } else {
+    return <div>等待设计部上传包装设计。</div>;
+  }
+};
 
 import DraftReviewModal from './DraftReviewModal'
 
