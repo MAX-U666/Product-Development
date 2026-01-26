@@ -154,6 +154,15 @@ export default function App() {
 
   // ✅ 新增：点👁 快速预览（优先弹 AI 草稿 + 开发素材）
   async function openQuickPreview(product) {
+    // ✅ 二次审核（开发素材复审）时：直接打开【产品详情】让管理员点“通过/驳回”
+    if (
+      product?.stage === 1 &&
+      (product?.dev_assets_status === "待复审" || product?.status === "待管理员复审")
+    ) {
+      setSelectedProduct(product)
+      return
+    }
+
     const draftId = product?.created_from_draft_id
     if (!draftId) {
       // 没有草稿ID：保持你原来的行为
