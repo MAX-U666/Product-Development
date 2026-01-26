@@ -25,8 +25,14 @@ import {
   Palette,
   Beaker,
 } from "lucide-react";
-import { updateData, supabase } from "./api";
+import { updateData } from "./api";
+import { createClient } from "@supabase/supabase-js";
 import { getCurrentBeijingISO, formatTime } from "./timeConfig";
+
+// Supabase 客户端（用于查询瓶型图）
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // ========== 工具函数 ==========
 function safeOpen(url) {
