@@ -1,4 +1,3 @@
-// File: src/DesignerDashboard.jsx
 import React, { useState, useMemo } from 'react'
 import { Package, Upload, CheckCircle, Clock, AlertCircle, Eye } from 'lucide-react'
 import { updateData, uploadImage, fetchAIDraftById } from './api'
@@ -19,11 +18,36 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [designFile, setDesignFile] = useState(null)
 
-  // ✅ 新增：查看 AI 草稿 Modal 相关
+  // ✅ 查看 AI 草稿（只读）
   const [draftModalOpen, setDraftModalOpen] = useState(false)
   const [activeDraft, setActiveDraft] = useState(null)
-  const [activeDraftProduct, setActiveDraftProduct] = useState(null)
-  const [draftLoadingId, setDraftLoadingId] = useState(null)
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftProduct, setDraftProduct] = useState(null)
+
+  const openAIDraft = async (product) => {
+    const draftId = product?.created_from_draft_id
+    if (!draftId) {
+      alert('该任务未关联 AI 草稿（created_from_draft_id 为空）')
+      return
+    }
+
+    setDraftLoading(true)
+    try {
+      const d = await fetchAIDraftById(draftId)
+      if (!d) {
+        alert('未找到 AI 草稿（可能已删除或权限问题）')
+        return
+      }
+      setActiveDraft(d)
+      // ✅ 关键：把产品一起传给 modal，用于展示开发上传的瓶型/参考包装
+      setDraftProduct(product)
+      setDraftModalOpen(true)
+    } catch (e) {
+      alert(`读取 AI 草稿失败：${e?.message || e}`)
+    } finally {
+      setDraftLoading(false)
+    }
+  }
 
   // 待接单：阶段1 且 没有设计师
   const pendingProducts = useMemo(() => {
@@ -37,7 +61,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
     )
   }, [products, currentUser.id])
 
-  // 已完成：通过审核（你也可以加上 stage >= 4 更严格）
+  // 已完成：通过审核
   const completedTasks = useMemo(() => {
     return products.filter(
       (p) =>
@@ -45,31 +69,6 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
         p.package_review_status === REVIEW_STATUS.APPROVED
     )
   }, [products, currentUser.id])
-
-  // ✅ 新增：打开 AI 草稿
-  const openAIDraft = async (product) => {
-    const draftId = product?.created_from_draft_id
-    if (!draftId) {
-      alert('该任务未关联 AI 草稿（created_from_draft_id 为空）')
-      return
-    }
-
-    setDraftLoadingId(product.id)
-    try {
-      const d = await fetchAIDraftById(draftId)
-      if (!d) {
-        alert('未找到 AI 草稿（可能已删除或权限问题）')
-        return
-      }
-      setActiveDraft(d)
-      setActiveDraftProduct(product) // ✅ 关键：把产品传进去，让草稿里展示瓶型图/参考包装图
-      setDraftModalOpen(true)
-    } catch (e) {
-      alert(`读取 AI 草稿失败：${e?.message || e}`)
-    } finally {
-      setDraftLoadingId(null)
-    }
-  }
 
   // 接单
   async function handleAcceptTask(product) {
@@ -81,8 +80,6 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
         stage: 2,
         status: '包装设计中',
         design_start_time: getCurrentBeijingISO(),
-
-        // ✅ 修复6：接单即进入 designing
         package_review_status: REVIEW_STATUS.DESIGNING
       })
 
@@ -104,7 +101,6 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
     try {
       const designUrl = await uploadImage('package-designs', designFile)
 
-      // 上传只更新文件与时间，不强制改 stage / pending
       await updateData('products', product.id, {
         package_design_url: designUrl,
         package_design_time: getCurrentBeijingISO()
@@ -121,7 +117,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
     }
   }
 
-  // ✅ 修复5：提交审核时才进入 stage=3 且 pending
+  // 提交审核：stage=3 且 pending
   async function handleSubmitReview(product) {
     if (!product.package_design_url) {
       alert('请先上传设计稿')
@@ -133,8 +129,6 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
       await updateData('products', product.id, {
         stage: 3,
         status: '待审核',
-
-        // ✅ 这时候才改成 pending
         package_review_status: REVIEW_STATUS.PENDING
       })
 
@@ -245,10 +239,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
               const status = product.package_review_status ?? REVIEW_STATUS.NONE
               const hasDesign = !!product.package_design_url
 
-              // ✅ 核心：审核中必须 stage===3 且 pending
-              const isPending =
-                product.stage === 3 && status === REVIEW_STATUS.PENDING
-
+              const isPending = product.stage === 3 && status === REVIEW_STATUS.PENDING
               const isRejected = status === REVIEW_STATUS.REJECTED
               const isDesigning = status === REVIEW_STATUS.DESIGNING || product.stage === 2
               const isApproved = status === REVIEW_STATUS.APPROVED
@@ -355,15 +346,14 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                   {/* 操作区：审核中禁止操作 */}
                   {!isPending && (
                     <div className="border-t border-gray-200 pt-4">
-                      {/* ✅ 新增：查看 AI 草稿（放在上传区上方） */}
+                      {/* ✅ 查看AI草稿按钮：放在上传设计稿上方 */}
                       <div className="mb-3 flex justify-end">
                         <button
-                          type="button"
                           onClick={() => openAIDraft(product)}
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm"
                         >
                           <Eye className="w-4 h-4" />
-                          {draftLoadingId === product.id ? '加载中…' : '查看AI草稿'}
+                          {draftLoading ? '加载中…' : '查看AI草稿'}
                         </button>
                       </div>
 
@@ -401,7 +391,7 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                           </button>
                         )}
 
-                        {/* 提交审核：有设计稿才允许（不管是否 rejected，都允许重新提交） */}
+                        {/* 提交审核：有设计稿才允许 */}
                         {hasDesign && (
                           <button
                             onClick={() => handleSubmitReview(product)}
@@ -422,18 +412,6 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
                         <Clock size={16} />
                         设计稿已提交，正在等待管理员审核...
                       </p>
-
-                      {/* ✅ 审核中也允许查看 AI 草稿（不影响任何状态） */}
-                      <div className="mt-3 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openAIDraft(product)}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-yellow-200 bg-white hover:bg-yellow-50 text-sm"
-                        >
-                          <Eye className="w-4 h-4" />
-                          {draftLoadingId === product.id ? '加载中…' : '查看AI草稿'}
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -443,17 +421,13 @@ export default function DesignerDashboard({ products = [], currentUser, onRefres
         )}
       </div>
 
-      {/* ✅ 渲染 AI 草稿 Modal（只读） */}
+      {/* ✅ 查看 AI 草稿（只读 Modal） */}
       {draftModalOpen && activeDraft && (
         <DraftReviewModal
           draft={activeDraft}
-          product={activeDraftProduct}
+          product={draftProduct}
           mode="view"
-          onClose={() => {
-            setDraftModalOpen(false)
-            setActiveDraft(null)
-            setActiveDraftProduct(null)
-          }}
+          onClose={() => setDraftModalOpen(false)}
         />
       )}
     </div>
