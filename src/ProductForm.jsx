@@ -1,33 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { X, Upload, Image as ImageIcon, Download, FileUp } from 'lucide-react'
-import { insertData, fetchData } from './api'
+import { insertData, fetchData, generateSKU } from './api'  // ✅ 添加 generateSKU
 import { getCurrentBeijingISO } from './timeConfig'
-// 修改产品创建状态：传统创建产品和AI创建产品状态分开
-const handleCreateProduct = async (isAI = false) => {
-  const productData = {
-    name: productName,
-    description: productDescription,
-    category: productCategory,
-    // 其他产品信息
-    stage: isAI ? 'AI_draft_created' : 'product_created', // AI流程和传统流程的stage值不同
-    status: isAI ? '待审核' : '待审核', // 初始状态，待审核
-    dev_assets_status: isAI ? '待复审' : '待审核', // AI流程不直接上传设计
-    ai_generated: isAI, // 用来标记是否是AI创建
-  };
-
-  try {
-    const response = await api.createProduct(productData);
-    if (response.success) {
-      alert('产品创建成功！');
-    } else {
-      alert('产品创建失败，请重试。');
-    }
-  } catch (error) {
-    console.error('创建产品出错', error);
-  }
-};
-
-
 
 // ⚠️ 说明：你现在 api.js 里 SUPABASE_URL / SUPABASE_KEY 没有导出
 // 为了让 ProductForm "单文件可用"，这里复制一份（跟 api.js 保持一致）
@@ -368,12 +342,17 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
       setLoadingTip('正在上传参考设计图片...')
       const refImgUrl = await uploadToBucket('ref-design-images', refDesignImg)
 
+      // ✅ 生成 SKU 编码
+      setLoadingTip('正在生成SKU编码...')
+      const sku = await generateSKU(formData.category, formData.developMonth)
+      console.log('✅ 生成的SKU:', sku)
+
       setLoadingTip('正在创建产品...')
 
       const beijingTimeNow = getCurrentBeijingISO()
 
-      // ✅ 按你要求：删除 id 字段 + 增加包装设计相关字段
       const newProduct = {
+        sku,  // ✅ 添加 SKU 字段
         develop_month: formData.developMonth,
         develop_time: formData.developTime,
         category: formData.category,
@@ -405,8 +384,7 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
         bottle_id: selectedBottle?.id ?? null,
 
         stage: 1,
-        status: '待审核',
-        dev_assets_status: '待复审',
+        status: '进行中',
         developer_id: currentUser.id,
         develop_start_time: beijingTimeNow,
         develop_submit_time: beijingTimeNow,
@@ -423,7 +401,7 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
 
       await insertData('products', newProduct)
 
-      alert('产品创建成功！')
+      alert(`产品创建成功！\n\nSKU: ${sku}`)
       onSuccess?.()
       onClose?.()
     } catch (error) {
@@ -456,7 +434,11 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
 
         setLoadingTip(`正在创建第 ${i + 1}/${importedData.length} 个产品...`)
 
+        // ✅ 为每个产品生成 SKU
+        const sku = await generateSKU(data.category, data.developMonth)
+
         const newProduct = {
+          sku,  // ✅ 添加 SKU 字段
           develop_month: data.developMonth,
           develop_time: data.developTime,
           category: data.category,
@@ -498,7 +480,7 @@ export default function ProductForm({ currentUser, onClose, onSuccess }) {
           package_designer_id: null,
           package_design_url: null,
           package_design_time: null,
-          package_review_status: null,
+          package_review_status: 'pending',
           package_review_note: null,
           review_history: []
         }
