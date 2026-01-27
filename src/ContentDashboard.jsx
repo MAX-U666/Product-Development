@@ -22,11 +22,11 @@ export default function ContentDashboard({ products = [], currentUser, onRefresh
   const [acceptedIds, setAcceptedIds] = useState([])
 
   // 待接单的产品（包装审核通过，stage=4，且未被接单）
-  // ✅ 增加 acceptedIds 过滤，确保接单后立即移除
+  // ✅ 修复：content_creator_id 为 0 时也是有效值，不能用 !p.content_creator_id 判断
   const pendingProducts = useMemo(() => {
     return products.filter(p => 
       p.stage === 4 && 
-      !p.content_creator_id && 
+      (p.content_creator_id === null || p.content_creator_id === undefined) && 
       !acceptedIds.includes(p.id)
     )
   }, [products, acceptedIds])
