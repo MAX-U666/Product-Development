@@ -4,6 +4,147 @@ const SB_URL = 'https://ppzwadqyqjadfdklkvtw.supabase.co'
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwendhZHF5cWphZGZka2xrdnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4ODgzOTQsImV4cCI6MjA4NDQ2NDM5NH0.xRfWovMVy55OqFFeS3hi1bn7X3CMji-clm8Hzo0yBok'
 const STORAGE_BUCKET = 'bottle-library'
 
+// ================= SKU 自动编码 =================
+
+// 类别缩写映射
+const CATEGORY_CODE_MAP = {
+  '洗发水': 'XFS',
+  '沐浴露': 'MYL',
+  '身体乳': 'STR',
+  '护发素': 'HFS',
+  '弹力素': 'DLS',
+  '护手霜': 'HSS',
+  '洗面奶': 'XMN',
+  '精华液': 'JHY',
+  '面膜': 'MM',
+  '其他': 'QT',
+}
+
+/**
+ * 获取类别缩写
+ * @param {string} category - 产品类别
+ * @returns {string} - 类别缩写
+ */
+function getCategoryCode(category) {
+  if (!category) return 'QT'
+  
+  // 精确匹配
+  if (CATEGORY_CODE_MAP[category]) {
+    return CATEGORY_CODE_MAP[category]
+  }
+  
+  // 模糊匹配（包含关键字）
+  for (const [key, code] of Object.entries(CATEGORY_CODE_MAP)) {
+    if (category.includes(key) || key.includes(category)) {
+      return code
+    }
+  }
+  
+  // 默认返回 QT（其他）
+  return 'QT'
+}
+
+/**
+ * 生成 SKU 编码
+ * 格式：{类别缩写}{年月}{3位序号}
+ * 示例：XFS2601001
+ * 
+ * @param {string} category - 产品类别
+ * @param {string} developMonth - 开发月份 (格式: 2026-01)
+ * @returns {Promise<string>} - 生成的 SKU
+ */
+export async function generateSKU(category, developMonth) {
+  // 1. 获取类别缩写
+  const categoryCode = getCategoryCode(category)
+  
+  // 2. 格式化年月（从 2026-01 变成 2601）
+  let yearMonth = ''
+  if (developMonth && developMonth.includes('-')) {
+    const [year, month] = developMonth.split('-')
+    yearMonth = year.slice(2) + month // 2026-01 -> 2601
+  } else {
+    // 默认使用当前年月
+    const now = new Date()
+    yearMonth = String(now.getFullYear()).slice(2) + String(now.getMonth() + 1).padStart(2, '0')
+  }
+  
+  // 3. 构建前缀
+  const prefix = `${categoryCode}${yearMonth}` // 例如：XFS2601
+  
+  // 4. 从数据库获取当前序号
+  try {
+    // 查询 sku_counter 表
+    const counterUrl = `${SB_URL}/rest/v1/sku_counter?prefix=eq.${prefix}`
+    const counterRes = await fetch(counterUrl, { headers: baseHeaders() })
+    
+    if (!counterRes.ok) {
+      console.error('查询 sku_counter 失败:', await counterRes.text())
+      // 如果表不存在或查询失败，使用时间戳作为后缀
+      return `${prefix}${Date.now().toString().slice(-3)}`
+    }
+    
+    const counters = await counterRes.json()
+    let nextNumber = 1
+    
+    if (counters && counters.length > 0) {
+      // 已有该前缀的计数器，递增
+      nextNumber = (counters[0].current_number || 0) + 1
+      
+      // 更新计数器
+      await fetch(`${SB_URL}/rest/v1/sku_counter?prefix=eq.${prefix}`, {
+        method: 'PATCH',
+        headers: baseHeaders({
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        }),
+        body: JSON.stringify({ current_number: nextNumber }),
+      })
+    } else {
+      // 没有该前缀的计数器，创建新的
+      await fetch(`${SB_URL}/rest/v1/sku_counter`, {
+        method: 'POST',
+        headers: baseHeaders({
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        }),
+        body: JSON.stringify({ prefix, current_number: 1 }),
+      })
+    }
+    
+    // 5. 生成最终 SKU（3位序号，不足补0）
+    const sku = `${prefix}${String(nextNumber).padStart(3, '0')}`
+    
+    console.log(`✅ 生成 SKU: ${sku} (类别: ${category}, 月份: ${developMonth})`)
+    return sku
+    
+  } catch (error) {
+    console.error('生成 SKU 失败:', error)
+    // 降级方案：使用时间戳
+    return `${prefix}${Date.now().toString().slice(-3)}`
+  }
+}
+
+/**
+ * 批量检查 SKU 是否已存在
+ * @param {string} sku - SKU 编码
+ * @returns {Promise<boolean>} - 是否存在
+ */
+export async function checkSKUExists(sku) {
+  if (!sku) return false
+  
+  try {
+    const url = `${SB_URL}/rest/v1/products?sku=eq.${sku}&select=id`
+    const res = await fetch(url, { headers: baseHeaders() })
+    
+    if (!res.ok) return false
+    
+    const rows = await res.json()
+    return rows && rows.length > 0
+  } catch {
+    return false
+  }
+}
+
 // ✅ 按 draft_id 取单条 AI 草稿（用于设计/内容查看）
 export async function fetchAIDraftById(draftId) {
   if (!draftId) return null
@@ -349,22 +490,6 @@ export async function fetchBottles() {
 
 export async function createBottle(data) {
   return await insertData('bottles', data)
-}
-
-// ✅ 新增：根据 bottle_id 查询瓶型图 URL
-export async function fetchBottleById(bottleId) {
-  if (!bottleId) return null
-  
-  const url = new URL(`${SB_URL}/rest/v1/bottles`)
-  url.searchParams.set('select', 'id,name,img_url')
-  url.searchParams.set('id', `eq.${bottleId}`)
-  url.searchParams.set('limit', '1')
-
-  const res = await fetch(url.toString(), { headers: baseHeaders() })
-  if (!res.ok) return null
-  
-  const rows = await res.json()
-  return rows?.[0] || null
 }
 
 // ================= AI（Vercel Functions）=================
