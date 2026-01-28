@@ -124,32 +124,42 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           90000
         );
         
-        // 验证返回数据
-        const listing = result?.listing || result;
-        const hasValidData = listing && (listing.title || listing.name || listing.price || listing.ingredients);
+        console.log('📥 竞品提取结果:', result);
+        
+        // 尝试多种数据结构
+        const listing = result?.listing || result?.data || result;
+        
+        // 放宽验证：只要有任何有效数据就算成功
+        const extractedData = {
+          name: listing?.title || listing?.name || listing?.product_name || listing?.productName || '',
+          price: listing?.price || listing?.sale_price || listing?.salePrice || '',
+          volume: listing?.volume || listing?.size || listing?.specification || '',
+          ingredients: listing?.ingredients || listing?.composition || listing?.ingredient_list || '',
+          benefits: listing?.benefits || listing?.highlights || listing?.features || [],
+          imageUrl: listing?.image || listing?.main_image || listing?.imageUrl || null
+        };
+        
+        // 只要有名称或价格就算成功
+        const hasValidData = extractedData.name || extractedData.price || extractedData.ingredients;
         
         if (!hasValidData) {
+          console.log('❌ 提取数据为空:', extractedData);
           updateCompetitor(index, {
             loading: false,
             success: false,
-            error: '未能提取到有效信息，请检查链接'
+            error: '未能提取到有效信息，请检查链接是否为有效商品页面'
           });
         } else {
+          console.log('✅ 提取成功:', extractedData);
           updateCompetitor(index, {
             loading: false,
             success: true,
-            data: {
-              name: listing.title || listing.name || '',
-              price: listing.price || '',
-              volume: listing.volume || listing.size || '',
-              ingredients: listing.ingredients || '',
-              benefits: listing.benefits || listing.highlights || [],
-              imageUrl: listing.image || listing.main_image || null
-            },
+            data: extractedData,
             error: ''
           });
         }
       } catch (err) {
+        console.error('❌ 提取异常:', err);
         updateCompetitor(index, {
           loading: false,
           success: false,
@@ -182,31 +192,39 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           90000
         );
         
-        const listing = result?.listing || result;
-        const hasValidData = listing && (listing.title || listing.name || listing.price || listing.ingredients);
+        console.log('📥 图片提取结果:', result);
+        
+        const listing = result?.listing || result?.data || result;
+        
+        const extractedData = {
+          name: listing?.title || listing?.name || listing?.product_name || '',
+          price: listing?.price || listing?.sale_price || '',
+          volume: listing?.volume || listing?.size || '',
+          ingredients: listing?.ingredients || listing?.composition || '',
+          benefits: listing?.benefits || listing?.highlights || [],
+          imageUrl: null
+        };
+        
+        const hasValidData = extractedData.name || extractedData.price || extractedData.ingredients;
         
         if (!hasValidData) {
+          console.log('❌ 图片提取数据为空:', extractedData);
           updateCompetitor(index, {
             loading: false,
             success: false,
             error: '未能从图片提取到有效信息'
           });
         } else {
+          console.log('✅ 图片提取成功:', extractedData);
           updateCompetitor(index, {
             loading: false,
             success: true,
-            data: {
-              name: listing.title || listing.name || '',
-              price: listing.price || '',
-              volume: listing.volume || listing.size || '',
-              ingredients: listing.ingredients || '',
-              benefits: listing.benefits || listing.highlights || [],
-              imageUrl: null
-            },
+            data: extractedData,
             error: ''
           });
         }
       } catch (err) {
+        console.error('❌ 图片提取异常:', err);
         updateCompetitor(index, {
           loading: false,
           success: false,
