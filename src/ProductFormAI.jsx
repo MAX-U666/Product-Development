@@ -649,12 +649,15 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
       // 解析结果并填充表单 - 修复：正确读取 result.data.plan
       if (result && result.success !== false) {
         const planData = result.data || result;
+        console.log("📦 planData:", planData);
+        
         const plan = safeJson(planData.plan) || planData.plan || planData;
+        console.log("📋 plan:", plan);
         
         const explanations = safeJson(planData.explanations) || planData.explanations || {};
-        
-        setFormData(prev => ({
-          ...prev,
+        console.log("💡 explanations:", explanations);
+
+        const newFormValues = {
           // 模块1: 产品名称
           name_zh: plan.productName?.zh || plan.name_zh || "",
           name_en: plan.productName?.en || plan.name_en || "",
@@ -679,7 +682,16 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           // 隐藏字段
           volume: plan.volume || manualVolume || "",
           packaging_requirements: plan.packaging?.requirements || plan.packaging_requirements || plan.packaging || ""
+        };
+        
+        console.log("📝 将要设置的表单数据:", newFormValues);
+        
+        setFormData(prev => ({
+          ...prev,
+          ...newFormValues
         }));
+        
+        console.log("✅ setFormData 已调用");
 
         // 设置AI说明 - 优先用 explanations，其次用 plan 里的字段
         setAiExplain({
@@ -728,12 +740,17 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             confidence: plan.productTitle?.confidence || explanations.title?.confidence
           }
         });
+        
+        console.log("✅ 数据设置完成，step3Done 应该变为 true");
       } else {
+        console.log("❌ result.success 为 false 或 result 为空");
         setGenerateError("AI 返回数据为空");
       }
     } catch (err) {
+      console.error("❌ 生成出错:", err);
       setGenerateError(err.message || "生成失败，请重试");
     } finally {
+      console.log("🏁 生成流程结束，isGenerating 设为 false");
       setIsGenerating(false);
     }
   };
