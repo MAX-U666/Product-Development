@@ -1,8 +1,9 @@
 // File: src/DraftReviewModal.jsx
-// ✅ 修复版本 - 2026-01-26
-// 修改内容：在「查看 AI 草稿」页面增加审核功能
-// - stage=1 + dev_assets_status="待复审" → 显示开发素材审核按钮
-// - stage=3 + package_review_status="pending" → 显示包装设计审核按钮
+// 🔄 更新版本 - 适配三语产品名称字段
+// 修改内容：
+// 1. 新增 name_zh, name_en, name_id 字段支持
+// 2. 在审核界面显示和编辑产品名称
+// 3. 创建产品时传递新字段
 
 import React, { useState, useEffect } from "react";
 import {
@@ -77,6 +78,56 @@ function ImgTile({ title, src }) {
   );
 }
 
+// 三语名称显示/编辑组件
+function TrilingualNameField({ nameZh, nameEn, nameId, onChangeZh, onChangeEn, onChangeId, readOnly = false }) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-4 lg:col-span-2">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <div className="text-sm font-semibold text-zinc-900">产品名称（三语）</div>
+          <div className="text-xs text-zinc-500 mt-0.5">用于包装设计和电商展示</div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">中文</label>
+          <input
+            type="text"
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 disabled:bg-zinc-50 disabled:text-zinc-500"
+            value={nameZh || ""}
+            placeholder="中文产品名称"
+            onChange={(e) => onChangeZh?.(e.target.value)}
+            disabled={readOnly}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">英文</label>
+          <input
+            type="text"
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 disabled:bg-zinc-50 disabled:text-zinc-500"
+            value={nameEn || ""}
+            placeholder="English Name"
+            onChange={(e) => onChangeEn?.(e.target.value)}
+            disabled={readOnly}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">印尼语</label>
+          <input
+            type="text"
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 disabled:bg-zinc-50 disabled:text-zinc-500"
+            value={nameId || ""}
+            placeholder="Nama Indonesia"
+            onChange={(e) => onChangeId?.(e.target.value)}
+            disabled={readOnly}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DraftReviewModal({
   draft,
   onClose,
@@ -86,6 +137,11 @@ export default function DraftReviewModal({
   currentUser = null,
 }) {
   const [formData, setFormData] = useState({
+    // 新增：三语名称
+    name_zh: "",
+    name_en: "",
+    name_id: "",
+    // 原有字段
     positioning: "",
     sellingPoint: "",
     ingredients: "",
@@ -107,6 +163,11 @@ export default function DraftReviewModal({
   useEffect(() => {
     if (draft) {
       setFormData({
+        // 新增：三语名称
+        name_zh: draft.name_zh || "",
+        name_en: draft.name_en || "",
+        name_id: draft.name_id || "",
+        // 原有字段
         positioning: draft.positioning || "",
         sellingPoint: draft.selling_point || "",
         ingredients: draft.ingredients || "",
@@ -137,6 +198,11 @@ export default function DraftReviewModal({
         category: draft.category,
         market: draft.market,
         platform: draft.platform,
+        // 新增：三语名称
+        name_zh: formData.name_zh,
+        name_en: formData.name_en,
+        name_id: formData.name_id,
+        // 原有字段
         positioning: formData.positioning,
         selling_point: formData.sellingPoint,
         ingredients: formData.ingredients,
@@ -464,6 +530,17 @@ export default function DraftReviewModal({
             </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {/* 新增：产品名称（三语） */}
+              <TrilingualNameField
+                nameZh={formData.name_zh}
+                nameEn={formData.name_en}
+                nameId={formData.name_id}
+                onChangeZh={(v) => !isView && setFormData((p) => ({ ...p, name_zh: v }))}
+                onChangeEn={(v) => !isView && setFormData((p) => ({ ...p, name_en: v }))}
+                onChangeId={(v) => !isView && setFormData((p) => ({ ...p, name_id: v }))}
+                readOnly={isView}
+              />
+
               <FieldRow
                 label="产品定位"
                 value={formData.positioning}
@@ -476,7 +553,7 @@ export default function DraftReviewModal({
               />
 
               <FieldRow
-                label="核心卖点"
+                label="卖点简介"
                 multiline
                 value={formData.sellingPoint}
                 onChange={(v) => !isView && setFormData((p) => ({ ...p, sellingPoint: v }))}
@@ -510,17 +587,6 @@ export default function DraftReviewModal({
               />
 
               <FieldRow
-                label="容量"
-                value={formData.volume}
-                onChange={(v) => !isView && setFormData((p) => ({ ...p, volume: v }))}
-                placeholder="例如：400ml"
-                aiNote={aiExplain?.volume?.note}
-                aiConfidence={aiExplain?.volume?.confidence}
-                aiReason={aiExplain?.volume?.reason}
-                readOnly={isView}
-              />
-
-              <FieldRow
                 label="香味"
                 value={formData.scent}
                 onChange={(v) => !isView && setFormData((p) => ({ ...p, scent: v }))}
@@ -532,7 +598,7 @@ export default function DraftReviewModal({
               />
 
               <FieldRow
-                label="料体颜色"
+                label="质地颜色"
                 value={formData.color}
                 onChange={(v) => !isView && setFormData((p) => ({ ...p, color: v }))}
                 placeholder="例如：乳白/透明..."
@@ -558,7 +624,7 @@ export default function DraftReviewModal({
                 multiline
                 value={formData.title}
                 onChange={(v) => !isView && setFormData((p) => ({ ...p, title: v }))}
-                placeholder="关键词 + 卖点 + 容量"
+                placeholder="建议：关键词堆叠 + 主要卖点 + 容量"
                 aiNote={aiExplain?.title?.note}
                 aiConfidence={aiExplain?.title?.confidence}
                 aiReason={aiExplain?.title?.reason}
@@ -570,7 +636,7 @@ export default function DraftReviewModal({
                 multiline
                 value={formData.keywords}
                 onChange={(v) => !isView && setFormData((p) => ({ ...p, keywords: v }))}
-                placeholder="keyword1, keyword2..."
+                placeholder="用逗号分隔：keyword1, keyword2..."
                 aiNote={aiExplain?.keywords?.note}
                 aiConfidence={aiExplain?.keywords?.confidence}
                 aiReason={aiExplain?.keywords?.reason}
@@ -582,86 +648,55 @@ export default function DraftReviewModal({
                 multiline
                 value={formData.packaging}
                 onChange={(v) => !isView && setFormData((p) => ({ ...p, packaging: v }))}
-                placeholder="风格、色调、元素..."
-                aiNote={aiExplain?.packaging?.note || aiExplain?.packaging_requirements?.note}
-                aiConfidence={aiExplain?.packaging?.confidence || aiExplain?.packaging_requirements?.confidence}
-                aiReason={aiExplain?.packaging?.reason || aiExplain?.packaging_requirements?.reason}
+                placeholder="例如：主图风格、信息层级、元素、色调、字体..."
+                aiNote={aiExplain?.packaging?.note}
+                aiConfidence={aiExplain?.packaging?.confidence}
+                aiReason={aiExplain?.packaging?.reason}
                 readOnly={isView}
               />
             </div>
           </div>
 
-          {/* 开发素材（瓶型图 & 参考包装图）*/}
-          <div className={`mt-5 rounded-2xl border p-5 ${
-            isDevAssetsReview 
-              ? "border-blue-300 bg-blue-50" 
-              : "border-zinc-200 bg-white"
-          }`}>
-            <div className="flex items-center justify-between">
+          {/* 开发素材区域 */}
+          {product && (isDevAssetsReview || bottleImg || refImgs.length > 0) && (
+            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
               <div className="text-sm font-semibold text-zinc-900">
-                {isDevAssetsReview && "🔍 "} 开发素材（瓶型图 / 参考包装）
+                🧪 开发素材
+                {isDevAssetsReview && <span className="ml-2 text-xs font-normal text-blue-600">（待审核）</span>}
               </div>
-              {isDevAssetsReview && (
-                <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
-                  待审核
-                </span>
-              )}
-            </div>
-            <div className="mt-3 grid gap-4 lg:grid-cols-2">
-              <div>
-                <div className="mb-2 text-xs text-zinc-500">瓶型图</div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <ImgTile title="瓶型图" src={bottleImg} />
-              </div>
-
-              <div>
-                <div className="mb-2 text-xs text-zinc-500">参考包装图</div>
-                {refImgs.length === 0 ? (
-                  <ImgTile title="参考包装图" src={null} />
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {refImgs.map((u, idx) => (
-                      <ImgTile key={idx} title={`参考图 ${idx + 1}`} src={u} />
-                    ))}
-                  </div>
-                )}
+                {[0, 1, 2].map((idx) => (
+                  <ImgTile
+                    key={idx}
+                    title={`参考包装 ${idx + 1}`}
+                    src={refImgs[idx]}
+                  />
+                ))}
               </div>
             </div>
+          )}
 
-            {!product && (
-              <div className="mt-3 text-xs text-amber-600">
-                提示：当前未传入 product，无法显示瓶型/参考包装。
+          {/* 包装设计稿区域 */}
+          {product && (isPackageReview || packageDesignUrl) && (
+            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
+              <div className="text-sm font-semibold text-zinc-900">
+                🎨 包装设计稿
+                {isPackageReview && <span className="ml-2 text-xs font-normal text-yellow-600">（待审核）</span>}
               </div>
-            )}
-          </div>
 
-          {/* 包装设计稿（设计师上传的）*/}
-          {(packageDesignUrl || isPackageReview) && (
-            <div className={`mt-5 rounded-2xl border p-5 ${
-              isPackageReview 
-                ? "border-yellow-300 bg-yellow-50" 
-                : "border-zinc-200 bg-white"
-            }`}>
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-zinc-900">
-                  {isPackageReview && "🔍 "} 包装设计稿（设计师上传）
-                </div>
-                {isPackageReview && (
-                  <span className="rounded-full bg-yellow-600 px-3 py-1 text-xs font-semibold text-white">
-                    待审核
-                  </span>
-                )}
-              </div>
-              <div className="mt-3">
+              <div className="mt-4">
                 {packageDesignUrl ? (
-                  <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+                  <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden shadow-sm">
                     <div className="flex items-center justify-between px-3 py-2 bg-zinc-50 border-b border-zinc-200">
-                      <div className="text-sm font-semibold text-zinc-800">当前设计稿</div>
+                      <div className="text-sm font-semibold text-zinc-800">设计稿</div>
                       <button
                         type="button"
                         onClick={() => safeOpen(packageDesignUrl)}
                         className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
                       >
-                        打开大图 <ExternalLink className="h-3.5 w-3.5" />
+                        查看原图 <ExternalLink className="h-3.5 w-3.5" />
                       </button>
                     </div>
                     <button type="button" className="w-full" onClick={() => safeOpen(packageDesignUrl)}>
