@@ -21,6 +21,12 @@ const CATEGORIES = ["洗发水", "沐浴露", "身体乳", "护发素", "弹力�
 const MARKETS = ["美国", "印尼", "东南亚", "欧洲"];
 const PLATFORMS = ["Amazon", "TikTok", "Shopee", "Lazada"];
 
+// 默认品牌信息
+const DEFAULT_BRAND = {
+  name: "BIOAQUA",
+  philosophy: "自然科技，焕活秀发"
+};
+
 // 固定使用千问
 const AI_CONFIG = {
   extract_provider: "qwen",
@@ -415,6 +421,16 @@ const TrilingualNameField = ({
 // ==================== 主组件 ====================
 
 export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
+  // ========== 品牌信息 ==========
+  const [brandName, setBrandName] = useState(DEFAULT_BRAND.name);
+  const [brandPhilosophy, setBrandPhilosophy] = useState(DEFAULT_BRAND.philosophy);
+
+  // ========== 核心输入（手动） ==========
+  const [coreSellingPoint, setCoreSellingPoint] = useState(""); // 核心卖点
+  const [conceptIngredient, setConceptIngredient] = useState(""); // 主概念成分
+  const [manualVolume, setManualVolume] = useState(""); // 容量
+  const [manualPricing, setManualPricing] = useState(""); // 定价
+
   // ========== 基础信息 ==========
   const [category, setCategory] = useState("");
   const [market, setMarket] = useState("");
@@ -478,7 +494,10 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
   const [showCompetitorDetails, setShowCompetitorDetails] = useState(false);
 
   // ========== 计算步骤完成状态 ==========
-  const step1Done = Boolean(category && market && platform);
+  const step1Done = Boolean(
+    category && market && platform && 
+    coreSellingPoint && conceptIngredient
+  );
   
   const successfulExtracts = competitors.filter(c => c.success && c.data).length;
   const step2Done = successfulExtracts >= 1;
@@ -595,9 +614,19 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         }));
 
       const payload = {
+        // 品牌信息
+        brandName,
+        brandPhilosophy,
+        // 核心输入（手动）
+        coreSellingPoint,
+        conceptIngredient,
+        volume: manualVolume,
+        pricing: manualPricing,
+        // 市场信息
         category,
         market,
         platform,
+        // 竞品数据
         competitors: competitorsData,
         ai_config: AI_CONFIG
       };
@@ -762,6 +791,12 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         category,
         market,
         platform,
+        // 品牌信息
+        brand_name: brandName || null,
+        brand_philosophy: brandPhilosophy || null,
+        // 核心输入（手动）
+        core_selling_point: coreSellingPoint || null,
+        concept_ingredient: conceptIngredient || null,
         // 9模块数据
         name_zh: formData.name_zh || null,
         name_en: formData.name_en || null,
@@ -772,10 +807,10 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         efficacy: formData.efficacy || null,
         scent: formData.scent || null,
         texture_color: formData.texture_color || null,
-        pricing: formData.pricing || null,
+        pricing: formData.pricing || manualPricing || null,
         title: formData.title || null,
         keywords: formData.keywords || null,
-        volume: formData.volume || null,
+        volume: formData.volume || manualVolume || null,
         packaging_requirements: formData.packaging_requirements || null,
         // AI元数据
         extract_provider: AI_CONFIG.extract_provider,
@@ -832,44 +867,130 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
             <StepHeader
               step={1}
               title="基础信息"
-              subtitle="选择产品类目、目标市场和销售平台"
+              subtitle="品牌信息、核心输入、市场定位"
               done={step1Done}
               active={!step1Done}
             />
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="text-xs font-medium text-zinc-700 mb-1.5 block">产品类目</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                >
-                  <option value="">请选择</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+            {/* 品牌信息 */}
+            <div className="mt-5 p-4 bg-zinc-50 rounded-xl">
+              <div className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">🏷️ 品牌信息</div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">品牌名</label>
+                  <input
+                    type="text"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="如：BIOAQUA"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">品牌理念</label>
+                  <input
+                    type="text"
+                    value={brandPhilosophy}
+                    onChange={(e) => setBrandPhilosophy(e.target.value)}
+                    placeholder="如：自然科技，焕活秀发"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-zinc-700 mb-1.5 block">目标市场</label>
-                <select
-                  value={market}
-                  onChange={(e) => setMarket(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                >
-                  <option value="">请选择</option>
-                  {MARKETS.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+            </div>
+
+            {/* 核心输入（手动） */}
+            <div className="mt-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+              <div className="text-xs font-semibold text-indigo-600 mb-3 uppercase tracking-wide">✏️ 核心输入（必填）</div>
+              <div className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">
+                      核心卖点 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={coreSellingPoint}
+                      onChange={(e) => setCoreSellingPoint(e.target.value)}
+                      placeholder="如：防脱+清凉"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">
+                      主概念成分 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={conceptIngredient}
+                      onChange={(e) => setConceptIngredient(e.target.value)}
+                      placeholder="如：Rosemary 迷迭香"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">容量</label>
+                    <input
+                      type="text"
+                      value={manualVolume}
+                      onChange={(e) => setManualVolume(e.target.value)}
+                      placeholder="如：300ml"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">目标定价</label>
+                    <input
+                      type="text"
+                      value={manualPricing}
+                      onChange={(e) => setManualPricing(e.target.value)}
+                      placeholder="如：IDR 89,900"
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-zinc-700 mb-1.5 block">销售平台</label>
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                >
-                  <option value="">请选择</option>
-                  {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
+            </div>
+
+            {/* 市场信息 */}
+            <div className="mt-4 p-4 bg-zinc-50 rounded-xl">
+              <div className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">🌏 市场信息</div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">产品类目</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                  >
+                    <option value="">请选择</option>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">目标市场</label>
+                  <select
+                    value={market}
+                    onChange={(e) => setMarket(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                  >
+                    <option value="">请选择</option>
+                    {MARKETS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">销售平台</label>
+                  <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                  >
+                    <option value="">请选择</option>
+                    {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
