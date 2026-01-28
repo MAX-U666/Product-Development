@@ -1,7 +1,9 @@
 // src/AIDraftDashboard.jsx
+// 🔄 更新版本 - 添加已拒绝草稿重新编辑功能
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchAIDrafts } from "./api";
 import DraftReviewModal from "./DraftReviewModal";
+import DraftEditModal from "./DraftEditModal"; // 新增：编辑弹窗
 
 // ✅ 把数据库里各种可能的 status 统一成你UI的三态
 function normalizeStatus(raw) {
@@ -23,7 +25,7 @@ function normalizeStatus(raw) {
   if (["通过", "已审通过", "审核通过"].includes(s)) return "已通过";
   if (["拒绝", "已驳回", "驳回", "审核拒绝"].includes(s)) return "已拒绝";
 
-  // 其他未知状态：先归到待审核，避免页面“空白”
+  // 其他未知状态：先归到待审核，避免页面"空白"
   return "待审核";
 }
 
@@ -31,6 +33,7 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
   const [drafts, setDrafts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeDraft, setActiveDraft] = useState(null);
+  const [editingDraft, setEditingDraft] = useState(null); // 新增：正在编辑的草稿
 
   const load = async () => {
     setLoading(true);
@@ -55,7 +58,14 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
     onRefresh?.();
   };
 
-  // ✅ 归一化后的 drafts（最关键：避免分组筛不到导致“空白”）
+  // ✅ 编辑完成后回调
+  const handleEdited = async () => {
+    setEditingDraft(null);
+    await load();
+    onRefresh?.();
+  };
+
+  // ✅ 归一化后的 drafts（最关键：避免分组筛不到导致"空白"）
   const normalizedDrafts = useMemo(() => {
     return (drafts || []).map((d) => ({
       ...d,
@@ -136,7 +146,7 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
             </div>
           )}
 
-          {/* 已拒绝 */}
+          {/* 已拒绝 - 新增重新编辑按钮 */}
           {rejected.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -149,6 +159,8 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
                     key={d.id}
                     draft={d}
                     onReview={() => setActiveDraft(d)}
+                    onEdit={() => setEditingDraft(d)}
+                    showEditButton={true}
                   />
                 ))}
               </div>
@@ -164,6 +176,7 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
         </div>
       )}
 
+      {/* 审核弹窗 */}
       {activeDraft && (
         <DraftReviewModal
           draft={activeDraft}
@@ -172,16 +185,29 @@ export default function AIDraftDashboard({ currentUser, onRefresh }) {
           onSuccess={handleReviewed}
         />
       )}
+
+      {/* 编辑弹窗 */}
+      {editingDraft && (
+        <DraftEditModal
+          draft={editingDraft}
+          currentUser={currentUser}
+          onClose={() => setEditingDraft(null)}
+          onSuccess={handleEdited}
+        />
+      )}
     </div>
   );
 }
 
-// ✅ 草稿卡片组件
-function DraftCard({ draft, onReview }) {
+// ✅ 草稿卡片组件 - 新增 onEdit 和 showEditButton 属性
+function DraftCard({ draft, onReview, onEdit, showEditButton = false }) {
   const category = draft.category || '未知类目';
   const market = draft.market || '未知市场';
   const platform = draft.platform || '未知平台';
   const title = draft.title || '';
+  
+  // 新增：显示产品名称（优先中文）
+  const productName = draft.name_zh || draft.name_en || draft.name_id || '';
 
   const statusConfig = {
     '待审核': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '待审核' },
@@ -193,42 +219,77 @@ function DraftCard({ draft, onReview }) {
   const status = statusConfig[uiStatus] || statusConfig['待审核'];
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 flex items-center justify-between gap-4 hover:shadow-sm transition-shadow">
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold text-sm text-gray-800 mb-1">
-          {category} · {market} · {platform}
-        </div>
-
-        {title ? (
-          <div className="text-xs text-zinc-700 line-clamp-2 mb-2">
-            <span className="font-semibold">标题：</span>
-            {title}
+    <div className="rounded-xl border border-zinc-200 bg-white p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          {/* 产品名称（新增） */}
+          {productName && (
+            <div className="font-semibold text-base text-zinc-900 mb-1 line-clamp-1">
+              {productName}
+            </div>
+          )}
+          
+          {/* 基础信息 */}
+          <div className="font-medium text-sm text-zinc-600 mb-1">
+            {category} · {market} · {platform}
           </div>
-        ) : (
-          <div className="text-xs text-zinc-400 mb-2">标题：—</div>
-        )}
 
-        <div className="flex items-center gap-4 text-xs text-zinc-500">
-          <span>
-            创建时间：{draft.created_at ? new Date(draft.created_at).toLocaleString('zh-CN') : '—'}
-          </span>
-          {draft.extract_provider && <span>提取模型：{draft.extract_provider}</span>}
-          {draft.generate_provider && <span>生成模型：{draft.generate_provider}</span>}
-          {typeof draft.estimated_cost === 'number' && <span>成本：${draft.estimated_cost.toFixed(4)}</span>}
+          {/* 标题 */}
+          {title ? (
+            <div className="text-xs text-zinc-500 line-clamp-2 mb-2">
+              <span className="font-medium">标题：</span>
+              {title}
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-400 mb-2">标题：—</div>
+          )}
+
+          {/* 元信息 */}
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+            <span>
+              创建：{draft.created_at ? new Date(draft.created_at).toLocaleString('zh-CN') : '—'}
+            </span>
+            {draft.extract_provider && <span>提取：{draft.extract_provider}</span>}
+            {draft.generate_provider && <span>生成：{draft.generate_provider}</span>}
+            {typeof draft.estimated_cost === 'number' && draft.estimated_cost > 0 && (
+              <span>成本：${draft.estimated_cost.toFixed(4)}</span>
+            )}
+          </div>
+
+          {/* 拒绝原因（如有） */}
+          {uiStatus === '已拒绝' && draft.review_comment && (
+            <div className="mt-2 p-2 bg-red-50 rounded-lg text-xs text-red-700">
+              <span className="font-medium">拒绝原因：</span>
+              {draft.review_comment}
+            </div>
+          )}
         </div>
-      </div>
 
-      <div className="flex items-center gap-3 shrink-0">
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
-          {status.label}
-        </span>
+        {/* 右侧操作区 */}
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <span className={`px-3 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
+            {status.label}
+          </span>
 
-        <button
-          onClick={onReview}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
-        >
-          {uiStatus === '待审核' ? '审核' : '查看'}
-        </button>
+          <div className="flex items-center gap-2">
+            {/* 已拒绝状态显示"重新编辑"按钮 */}
+            {showEditButton && onEdit && (
+              <button
+                onClick={onEdit}
+                className="px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 text-orange-600 text-sm font-medium hover:bg-orange-100 transition-colors"
+              >
+                ✏️ 重新编辑
+              </button>
+            )}
+
+            <button
+              onClick={onReview}
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              {uiStatus === '待审核' ? '审核' : '查看'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
