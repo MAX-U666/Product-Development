@@ -1,4 +1,4 @@
-// src/DraftEditModal.jsx*
+// src/DraftEditModal.jsx
 // 🆕 新增组件 - 编辑已拒绝的草稿并重新提交审核
 import React, { useState, useEffect } from "react";
 import { X, Save, Loader, Tag, Target, FileText, Beaker, Sparkles, Palette, DollarSign } from "lucide-react";
