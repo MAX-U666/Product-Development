@@ -1,4 +1,5 @@
-// File: src/ProductFormAI/components/FieldRow.jsx
+// src/ProductFormAI/components/FieldRow.jsx
+// 字段行组件 - 用于显示和编辑AI生成的字段
 
 import React from "react";
 
@@ -12,6 +13,7 @@ export default function FieldRow({
   aiConfidence,
   aiReason,
   readOnly = false,
+  rows = 4,
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4">
@@ -38,8 +40,8 @@ export default function FieldRow({
       <div className="mt-3">
         {multiline ? (
           <textarea
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 disabled:bg-zinc-50 disabled:text-zinc-500"
-            rows={4}
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 disabled:bg-zinc-50 disabled:text-zinc-500 resize-none"
+            rows={rows}
             value={value || ""}
             placeholder={placeholder}
             onChange={(e) => onChange?.(e.target.value)}
