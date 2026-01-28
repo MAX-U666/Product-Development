@@ -148,7 +148,7 @@ export async function callDeepSeek(prompt) {
 // 通义千问（Qwen） API（OpenAI 兼容 / compatible-mode）
 export async function callQwen(prompt) {
   const key = requireEnv("DASHSCOPE_API_KEY");
-  const model = process.env.DASHSCOPE_MODEL || "qwen-plus";
+  const model = process.env.DASHSCOPE_MODEL || "qwen-turbo";
   // 兼容方式的 Base URL（国内外命名略不同）
   const baseURL = process.env.DASHSCOPE_BASE_URL
     || "https://dashscope.aliyuncs.com/compatible-mode/v1";
