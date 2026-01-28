@@ -314,7 +314,25 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
   };
 
   // 格式化生成数据为 UI 需要的结构
+  // 新 prompt 已经返回完整格式，这里只做兼容处理
   const formatGeneratedData = (plan, explanations, competitorsData) => {
+    // 如果后端已返回完整格式，直接使用
+    if (plan.productName && plan.positioning && plan.productIntro) {
+      console.log('✅ 使用后端返回的完整数据结构');
+      return {
+        ...plan,
+        // 确保 dataSourceNote 存在
+        dataSourceNote: plan.dataSourceNote || {
+          conceptBasis: `基于${competitorsData.length}条竞品链接提取分析`,
+          keywordBasis: '非精准搜索量数据，依据品牌常用表达、竞品高频词',
+          verificationTip: '如需验证热搜量，建议用 Shopee 关键词工具拉数'
+        }
+      };
+    }
+
+    // 兼容旧格式（如果后端返回旧格式）
+    console.log('⚠️ 使用兼容模式转换数据');
+    
     // 计算竞品价格区间
     const prices = competitorsData
       .map(c => c.price)
@@ -340,7 +358,6 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
     const uniqueIngredients = [...new Set(allIngredients)].slice(0, 4);
 
     return {
-      // 竞品分析摘要
       competitorAnalysis: {
         priceRange: { 
           min: minPrice ? `IDR ${minPrice.toLocaleString()}` : '-', 
@@ -349,125 +366,94 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         },
         commonIngredients: uniqueIngredients.length > 0 ? uniqueIngredients : ['未提取到成分'],
         gaps: ['待分析差异化机会'],
-        confidence: explanations.positioning?.confidence ? Math.round(explanations.positioning.confidence * 100) : 85
+        confidence: 85
       },
-
-      // 1. 产品名称
       productName: {
-        options: [
-          {
-            id: `${formData.conceptIngredient || 'Natural'} ${formData.coreSellingPoint || 'Care'} ${formData.category}`,
-            zh: `${formData.conceptIngredient || '天然'}${formData.coreSellingPoint || '护理'}${getCategoryZh(formData.category)}`,
-            formula: `${formData.conceptIngredient}(成分) + ${formData.coreSellingPoint}(卖点) + ${formData.category}(品类)`,
-            reason: '基于输入的核心卖点和概念成分组合',
-            isRecommended: true
-          }
-        ],
-        aiNote: plan.positioning ? '基于竞品分析和市场定位生成' : '基于输入信息生成',
+        options: [{
+          id: plan.title || `${formData.conceptIngredient} ${formData.coreSellingPoint} ${formData.category}`,
+          zh: plan.title || '产品名称',
+          formula: '成分 + 卖点 + 品类',
+          reason: '基于输入信息生成',
+          isRecommended: true
+        }],
+        aiNote: '基于竞品分析生成',
         reason: '依据竞品标题高频词分析',
         confidence: 85
       },
-
-      // 2. 产品定位
       positioning: {
-        value: plan.positioning || `${formData.coreSellingPoint} product for ${formData.market} market`,
-        valueZh: plan.positioning || `针对${formData.market}市场的${formData.coreSellingPoint}产品`,
-        aiNote: explanations.positioning?.note || 'AI 基于竞品分析生成的定位建议',
-        reason: explanations.positioning?.reason || '基于竞品分析和市场需求',
-        confidence: explanations.positioning?.confidence ? Math.round(explanations.positioning.confidence * 100) : 90
+        value: plan.positioning || '',
+        valueZh: plan.positioning || '',
+        aiNote: explanations?.positioning?.note || 'AI 定位建议',
+        reason: explanations?.positioning?.reason || '基于竞品分析',
+        confidence: Math.round((explanations?.positioning?.confidence || 0.9) * 100)
       },
-
-      // 3. 卖点简介
       productIntro: {
-        en: plan.sellingPoint || 'Product description to be generated.',
-        zh: plan.sellingPoint || '产品描述待生成。',
-        structure: {
-          painPoint: '待分析',
-          mechanism: plan.ingredients || '待分析',
-          experience: '待分析',
-          audience: '待分析'
-        },
-        aiNote: explanations.sellingPoint?.note || 'AI 生成的卖点描述',
-        reason: explanations.sellingPoint?.reason || '基于竞品卖点分析',
-        confidence: explanations.sellingPoint?.confidence ? Math.round(explanations.sellingPoint.confidence * 100) : 88
+        en: plan.sellingPoint || '',
+        zh: plan.sellingPoint || '',
+        structure: { painPoint: '', mechanism: '', experience: '', audience: '' },
+        aiNote: 'AI 生成的卖点描述',
+        reason: '基于竞品卖点分析',
+        confidence: 88
       },
-
-      // 4. 概念成分组合
       ingredientCombos: {
         items: parseIngredients(plan.ingredients || formData.conceptIngredient),
-        aiNote: explanations.ingredients?.note || 'AI 推荐的成分组合',
-        reason: explanations.ingredients?.reason || '基于竞品成分分析',
-        confidence: explanations.ingredients?.confidence ? Math.round(explanations.ingredients.confidence * 100) : 90
+        aiNote: 'AI 推荐的成分组合',
+        reason: '基于竞品成分分析',
+        confidence: 90
       },
-
-      // 5. 主打功效
       mainBenefits: {
         items: parseBenefits(plan.efficacy || formData.coreSellingPoint),
-        aiNote: explanations.efficacy?.note || 'AI 推荐的功效表达',
-        reason: explanations.efficacy?.reason || '基于市场热搜词',
-        confidence: explanations.efficacy?.confidence ? Math.round(explanations.efficacy.confidence * 100) : 87
+        aiNote: 'AI 推荐的功效表达',
+        reason: '基于市场热搜词',
+        confidence: 87
       },
-
-      // 6. 香味
       scent: {
         value: plan.scent || 'Fresh herbal',
         valueZh: plan.scent || '清新草本香',
-        aiNote: explanations.scent?.note || 'AI 推荐的香味方向',
-        reason: explanations.scent?.reason || '基于市场偏好分析',
-        confidence: explanations.scent?.confidence ? Math.round(explanations.scent.confidence * 100) : 85
+        aiNote: 'AI 推荐的香味方向',
+        reason: '基于市场偏好分析',
+        confidence: 85
       },
-
-      // 7. 料体颜色
       bodyColor: {
         primary: { en: plan.color || 'Translucent gel', zh: plan.color || '透明啫喱' },
         alternative: { en: 'Clear liquid', zh: '透明液体' },
-        aiNote: explanations.color?.note || 'AI 推荐的料体颜色',
-        reason: explanations.color?.reason || '基于品类惯例',
-        confidence: explanations.color?.confidence ? Math.round(explanations.color.confidence * 100) : 83
+        aiNote: 'AI 推荐的料体颜色',
+        reason: '基于品类惯例',
+        confidence: 83
       },
-
-      // 8. 定价策略
       pricingStrategy: {
         anchor: plan.pricing || formData.pricing || 'IDR 89,900',
         flash: 'IDR 69,900',
         bundle: 'IDR 159,000 (2 bottles)',
         competitorPrices: competitorsData.map((c, i) => `竞品#${i + 1}: ${c.price || '-'}`).join(' | '),
-        aiNote: explanations.pricing?.note || 'AI 推荐的定价策略',
-        reason: explanations.pricing?.reason || '基于竞品价格分析',
-        confidence: explanations.pricing?.confidence ? Math.round(explanations.pricing.confidence * 100) : 90
+        aiNote: 'AI 推荐的定价策略',
+        reason: '基于竞品价格分析',
+        confidence: 90
       },
-
-      // 9. 产品标题
       productTitles: {
-        options: [
-          {
-            value: plan.title || `${formData.brandName} ${formData.conceptIngredient} ${formData.coreSellingPoint} ${formData.category} ${formData.volume || '300ml'}`,
-            valueZh: plan.title || `${formData.brandName} ${formData.conceptIngredient} ${formData.coreSellingPoint} ${getCategoryZh(formData.category)}`,
-            charCount: (plan.title || '').length || 150,
-            keywordLayout: `${formData.conceptIngredient}, ${formData.coreSellingPoint}`,
-            isRecommended: true
-          }
-        ],
-        aiNote: explanations.title?.note || 'SEO 优化的产品标题',
-        reason: explanations.title?.reason || '前40字符包含核心关键词',
-        confidence: explanations.title?.confidence ? Math.round(explanations.title.confidence * 100) : 92
+        options: [{
+          value: plan.title || '',
+          valueZh: plan.title || '',
+          charCount: (plan.title || '').length,
+          keywordLayout: `${formData.conceptIngredient}, ${formData.coreSellingPoint}`,
+          isRecommended: true
+        }],
+        aiNote: 'SEO 优化的产品标题',
+        reason: '前40字符包含核心关键词',
+        confidence: 92
       },
-
-      // 10. 搜索关键词
       searchKeywords: {
-        primary: Array.isArray(plan.keywords) ? plan.keywords.slice(0, 3) : [formData.category, formData.coreSellingPoint, formData.conceptIngredient].filter(Boolean),
+        primary: Array.isArray(plan.keywords) ? plan.keywords.slice(0, 3) : [formData.category, formData.coreSellingPoint].filter(Boolean),
         secondary: [],
         longtail: [],
-        aiNote: explanations.keywords?.note || 'AI 推荐的搜索关键词',
-        reason: explanations.keywords?.reason || '基于平台搜索趋势',
-        confidence: explanations.keywords?.confidence ? Math.round(explanations.keywords.confidence * 100) : 88
+        aiNote: 'AI 推荐的搜索关键词',
+        reason: '基于平台搜索趋势',
+        confidence: 88
       },
-
-      // 数据来源说明
       dataSourceNote: {
         conceptBasis: `基于${competitorsData.length}条竞品链接提取分析`,
         keywordBasis: '非精准搜索量数据，依据品牌常用表达、竞品高频词',
-        verificationTip: '如需验证热搜量，建议使用 Shopee 关键词工具拉取实时数据'
+        verificationTip: '如需验证热搜量，建议用 Shopee 关键词工具拉数'
       }
     };
   };
