@@ -3,7 +3,7 @@ import { X, Upload, Image as ImageIcon, Download, FileUp } from 'lucide-react'
 import { insertData, fetchData, generateSKU } from './api'  // ✅ 添加 generateSKU
 import { getCurrentBeijingISO } from './timeConfig'
 
-// ⚠️ 说明：你现在 api.js 里 SUPABASE_URL / SUPABASE_KEY 没有导出
+// ⚠️ 2说明：你现在 api.js 里 SUPABASE_URL / SUPABASE_KEY 没有导出
 // 为了让 ProductForm "单文件可用"，这里复制一份（跟 api.js 保持一致）
 const SUPABASE_URL = 'https://ppzwadqyqjadfdklkvtw.supabase.co'
 const SUPABASE_KEY =
