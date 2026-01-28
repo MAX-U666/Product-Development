@@ -43,6 +43,14 @@ export default async function handler(req, res) {
       market: body.market,
       platform: body.platform,
       
+      // 🆕 品牌信息
+      brand_name: body.brand_name || null,
+      brand_philosophy: body.brand_philosophy || null,
+      
+      // 🆕 核心输入（手动）
+      core_selling_point: body.core_selling_point || null,
+      concept_ingredient: body.concept_ingredient || null,
+      
       // 🆕 三语产品名称
       name_zh: body.name_zh || null,
       name_en: body.name_en || null,
