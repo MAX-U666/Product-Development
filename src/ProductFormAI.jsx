@@ -1,1319 +1,1907 @@
-// File: src/ProductFormAI.jsx
-// 🔄 重构版本 - 9模块AI草稿系统
-// 特性：
-// - 9个产品模块（含三语产品名称）
-// - 只使用千问(Qwen)模型
-// - 双模式竞品提取（链接+截图）
-// - 最多3个竞品
-
-import React, { useState, useMemo } from "react";
-import { 
-  X, Loader, CheckCircle, AlertCircle, Save, 
-  Link, Image, Trash2, Plus, ChevronDown, ChevronUp,
-  Sparkles, FileText, Beaker, Target, Palette, DollarSign, Tag
-} from "lucide-react";
-import { extractCompetitorInfo, generateProductPlan, insertAIDraft } from "./api";
-import { getCurrentBeijingISO } from "./timeConfig";
+// src/ProductFormAI.jsx
+// 基于 ai-draft-v3.jsx 改造，保留完整UI，接入真实API
+import React, { useState, useRef } from 'react';
+import { X, Upload, Link, Image as ImageIcon } from 'lucide-react';
+import { extractCompetitorInfo, generateProductPlan, insertAIDraft } from './api';
+import { getCurrentBeijingISO } from './timeConfig';
 
 // ==================== 常量配置 ====================
+const CATEGORIES = [
+  { value: 'Shampoo', label: '洗发水 Shampoo' },
+  { value: 'Conditioner', label: '护发素 Conditioner' },
+  { value: 'BodyWash', label: '沐浴露 Body Wash' },
+  { value: 'BodyLotion', label: '身体乳 Body Lotion' },
+  { value: 'HairMask', label: '发膜 Hair Mask' },
+  { value: 'HairSerum', label: '护发精油 Hair Serum' },
+];
 
-const CATEGORIES = ["洗发水", "沐浴露", "身体乳", "护发素", "弹力素", "护手霜"];
-const MARKETS = ["美国", "印尼", "东南亚", "欧洲"];
-const PLATFORMS = ["Amazon", "TikTok", "Shopee", "Lazada"];
+const MARKETS = [
+  { value: 'Indonesia', label: '🇮🇩 印尼 Indonesia' },
+  { value: 'Malaysia', label: '🇲🇾 马来西亚 Malaysia' },
+  { value: 'Thailand', label: '🇹🇭 泰国 Thailand' },
+  { value: 'Philippines', label: '🇵🇭 菲律宾 Philippines' },
+  { value: 'Vietnam', label: '🇻🇳 越南 Vietnam' },
+];
 
-// 默认品牌信息
-const DEFAULT_BRAND = {
-  name: "BIOAQUA",
-  philosophy: "自然科技，焕活秀发"
-};
+const PLATFORMS = [
+  { value: 'Shopee', label: 'Shopee' },
+  { value: 'Lazada', label: 'Lazada' },
+  { value: 'TikTok', label: 'TikTok Shop' },
+  { value: 'Tokopedia', label: 'Tokopedia' },
+];
 
-// 固定使用千问
+// AI 配置（固定千问）
 const AI_CONFIG = {
-  extract_provider: "qwen",
-  generate_provider: "qwen"
-};
-
-// ==================== 工具函数 ====================
-
-const withTimeout = async (promise, ms = 90000) => {
-  let t;
-  const timeout = new Promise((_, reject) => {
-    t = setTimeout(() => reject(new Error("请求超时，请重试")), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(t);
-  }
-};
-
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("文件读取失败"));
-    reader.readAsDataURL(file);
-  });
-
-const safeJson = (maybe) => {
-  if (maybe == null) return null;
-  if (typeof maybe === "object") return maybe;
-  if (typeof maybe === "string") {
-    try {
-      return JSON.parse(maybe);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-};
-
-// ==================== 子组件 ====================
-
-// 步骤头部
-const StepHeader = ({ step, title, subtitle, done, active }) => (
-  <div className="flex items-start gap-3">
-    <div className={`
-      flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold
-      ${done ? "bg-emerald-500 text-white" : active ? "bg-indigo-600 text-white" : "bg-zinc-200 text-zinc-500"}
-    `}>
-      {done ? <CheckCircle className="h-4 w-4" /> : step}
-    </div>
-    <div>
-      <div className={`font-semibold ${done ? "text-emerald-700" : active ? "text-zinc-900" : "text-zinc-500"}`}>
-        {title}
-      </div>
-      {subtitle && <div className="text-xs text-zinc-500 mt-0.5">{subtitle}</div>}
-    </div>
-  </div>
-);
-
-// 单个竞品卡片
-const CompetitorCard = ({ 
-  index, 
-  competitor, 
-  onUpdate, 
-  onExtract, 
-  onRemove,
-  extracting 
-}) => {
-  const { mode, url, images, imagePreviews, hint, loading, success, error, data } = competitor;
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 3);
-    if (files.length === 0) return;
-
-    const previews = [];
-    const imageData = [];
-
-    for (const file of files) {
-      const dataUrl = await fileToDataUrl(file);
-      previews.push(dataUrl);
-      imageData.push(file);
-    }
-
-    onUpdate(index, {
-      images: imageData,
-      imagePreviews: previews
-    });
-  };
-
-  const removeImage = (imgIndex) => {
-    const newImages = [...images];
-    const newPreviews = [...imagePreviews];
-    newImages.splice(imgIndex, 1);
-    newPreviews.splice(imgIndex, 1);
-    onUpdate(index, { images: newImages, imagePreviews: newPreviews });
-  };
-
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-      {/* 头部 */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-zinc-900">竞品 {index + 1}</span>
-          {success && <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">已提取</span>}
-          {error && <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">失败</span>}
-        </div>
-        {index > 0 && (
-          <button
-            type="button"
-            onClick={() => onRemove(index)}
-            className="text-zinc-400 hover:text-red-500 transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {/* 模式切换 */}
-      <div className="flex gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => onUpdate(index, { mode: "url" })}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-medium transition-colors ${
-            mode === "url" 
-              ? "bg-indigo-100 text-indigo-700 border border-indigo-200" 
-              : "bg-zinc-50 text-zinc-600 border border-zinc-200 hover:bg-zinc-100"
-          }`}
-        >
-          <Link className="h-4 w-4" />
-          粘贴链接
-        </button>
-        <button
-          type="button"
-          onClick={() => onUpdate(index, { mode: "image" })}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-medium transition-colors ${
-            mode === "image" 
-              ? "bg-indigo-100 text-indigo-700 border border-indigo-200" 
-              : "bg-zinc-50 text-zinc-600 border border-zinc-200 hover:bg-zinc-100"
-          }`}
-        >
-          <Image className="h-4 w-4" />
-          上传截图
-        </button>
-      </div>
-
-      {/* 链接模式 */}
-      {mode === "url" && (
-        <input
-          type="text"
-          value={url}
-          onChange={(e) => onUpdate(index, { url: e.target.value })}
-          placeholder="粘贴竞品商品链接（Shopee/Lazada/Amazon等）"
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-        />
-      )}
-
-      {/* 截图模式 */}
-      {mode === "image" && (
-        <div className="space-y-3">
-          {/* 图片预览 */}
-          {imagePreviews.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              {imagePreviews.map((preview, imgIdx) => (
-                <div key={imgIdx} className="relative group">
-                  <img 
-                    src={preview} 
-                    alt={`截图${imgIdx + 1}`}
-                    className="h-20 w-20 object-cover rounded-lg border border-zinc-200"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(imgIdx)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 上传按钮 */}
-          {imagePreviews.length < 3 && (
-            <label className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-zinc-300 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
-              <Plus className="h-4 w-4 text-zinc-500" />
-              <span className="text-sm text-zinc-600">添加截图（最多3张）</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-            </label>
-          )}
-
-          {/* 补充说明 */}
-          <input
-            type="text"
-            value={hint}
-            onChange={(e) => onUpdate(index, { hint: e.target.value })}
-            placeholder="补充说明（可选）：如产品名称、价格等"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-indigo-500 focus:ring-2"
-          />
-        </div>
-      )}
-
-      {/* 提取按钮 */}
-      <div className="mt-3 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => onExtract(index)}
-          disabled={loading || extracting || (mode === "url" ? !url : images.length === 0)}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <>
-              <Loader className="h-4 w-4 animate-spin" />
-              提取中...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              AI提取
-            </>
-          )}
-        </button>
-
-        {error && (
-          <span className="text-xs text-red-600">{error}</span>
-        )}
-      </div>
-
-      {/* 提取结果预览 */}
-      {data && (
-        <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-          <div className="text-xs font-semibold text-emerald-800 mb-1">✅ 已提取</div>
-          <div className="text-xs text-emerald-700">
-            {data.listing?.title || data.name || "竞品信息"}
-          </div>
-          {data.listing?.price && (
-            <div className="text-xs text-emerald-600 mt-1">价格: {data.listing.price}</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 模块字段编辑组件
-const ModuleField = ({
-  label,
-  icon: Icon,
-  value,
-  onChange,
-  placeholder,
-  multiline = false,
-  rows = 3,
-  aiNote,
-  aiConfidence,
-  aiReason,
-  required = false,
-  disabled = false,
-  maxLength
-}) => {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-indigo-600" />}
-          <span className="text-sm font-semibold text-zinc-900">
-            {label}
-            {required && <span className="text-red-500 ml-0.5">*</span>}
-          </span>
-        </div>
-        {typeof aiConfidence === "number" && (
-          <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-            置信度 {Math.round(aiConfidence * 100)}%
-          </span>
-        )}
-      </div>
-
-      {aiNote && (
-        <div className="mb-3 text-xs text-zinc-600 bg-zinc-50 rounded-lg px-3 py-2">
-          <span className="font-semibold">💭 AI说明：</span>{aiNote}
-        </div>
-      )}
-
-      {multiline ? (
-        <textarea
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 resize-none disabled:bg-zinc-50 disabled:text-zinc-500"
-          rows={rows}
-          value={value || ""}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          maxLength={maxLength}
-        />
-      ) : (
-        <input
-          type="text"
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2 disabled:bg-zinc-50 disabled:text-zinc-500"
-          value={value || ""}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          maxLength={maxLength}
-        />
-      )}
-
-      {maxLength && (
-        <div className="mt-1 text-xs text-zinc-400 text-right">
-          {(value || "").length} / {maxLength}
-        </div>
-      )}
-
-      {aiReason && (
-        <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <span className="font-semibold">📝 依据：</span>{aiReason}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 三语名称组件
-const TrilingualNameField = ({ 
-  nameZh, nameEn, nameId, 
-  onChangeZh, onChangeEn, onChangeId,
-  aiNote, aiConfidence 
-}) => {
-  return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
-          <Tag className="h-4 w-4 text-indigo-600" />
-          <span className="text-sm font-semibold text-zinc-900">
-            产品名称（三语）<span className="text-red-500 ml-0.5">*</span>
-          </span>
-        </div>
-        {typeof aiConfidence === "number" && (
-          <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-            置信度 {Math.round(aiConfidence * 100)}%
-          </span>
-        )}
-      </div>
-
-      {aiNote && (
-        <div className="mb-3 text-xs text-zinc-600 bg-zinc-50 rounded-lg px-3 py-2">
-          <span className="font-semibold">💭 AI说明：</span>{aiNote}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <div>
-          <label className="text-xs text-zinc-500 mb-1 block">中文名称</label>
-          <input
-            type="text"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-            value={nameZh || ""}
-            placeholder="如：迷迭香防脱洗发水"
-            onChange={(e) => onChangeZh(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-xs text-zinc-500 mb-1 block">英文名称</label>
-          <input
-            type="text"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-            value={nameEn || ""}
-            placeholder="如：Rosemary Anti Hair Fall Shampoo"
-            onChange={(e) => onChangeEn(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-xs text-zinc-500 mb-1 block">印尼语名称</label>
-          <input
-            type="text"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
-            value={nameId || ""}
-            placeholder="如：Shampo Anti Rontok Rosemary"
-            onChange={(e) => onChangeId(e.target.value)}
-          />
-        </div>
-      </div>
-    </div>
-  );
+  extract_provider: 'qwen',
+  generate_provider: 'qwen'
 };
 
 // ==================== 主组件 ====================
-
-export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
-  // ========== 品牌信息 ==========
-  const [brandName, setBrandName] = useState(DEFAULT_BRAND.name);
-  const [brandPhilosophy, setBrandPhilosophy] = useState(DEFAULT_BRAND.philosophy);
-
-  // ========== 核心输入（手动） ==========
-  const [coreSellingPoint, setCoreSellingPoint] = useState(""); // 核心卖点
-  const [conceptIngredient, setConceptIngredient] = useState(""); // 主概念成分
-  const [manualVolume, setManualVolume] = useState(""); // 容量
-  const [manualPricing, setManualPricing] = useState(""); // 定价
-
-  // ========== 基础信息 ==========
-  const [category, setCategory] = useState("");
-  const [market, setMarket] = useState("");
-  const [platform, setPlatform] = useState("");
-
-  // ========== 竞品数据 ==========
-  const [competitors, setCompetitors] = useState([
-    {
-      mode: "url",
-      url: "",
-      images: [],
-      imagePreviews: [],
-      hint: "",
-      loading: false,
-      success: false,
-      error: "",
-      data: null
-    }
-  ]);
-  const [extractingAny, setExtractingAny] = useState(false);
-
-  // ========== 生成状态 ==========
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState("");
-
-  // ========== 9模块数据 ==========
+const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
+  // ========== 表单状态 ==========
   const [formData, setFormData] = useState({
-    // 模块1: 产品名称（三语）
-    name_zh: "",
-    name_en: "",
-    name_id: "",
-    // 模块2: 产品定位
-    positioning: "",
-    // 模块3: 卖点简介
-    selling_point: "",
-    // 模块4: 主要成分
-    ingredients: "",
-    // 模块5: 主打功效
-    efficacy: "",
-    // 模块6: 香味
-    scent: "",
-    // 模块7: 质地颜色
-    texture_color: "",
-    // 模块8: 定价策略
-    pricing: "",
-    // 模块9: 产品标题 + 关键词
-    title: "",
-    keywords: "",
-    // 隐藏字段
-    volume: "",
-    packaging_requirements: ""
+    brandName: 'BIOAQUA',
+    brandPhilosophy: '自然科技，焕活秀发',
+    coreSellingPoint: '',
+    conceptIngredient: '',
+    volume: '',
+    pricing: '',
+    category: 'Shampoo',
+    market: 'Indonesia',
+    platform: 'Shopee'
   });
 
-  // ========== AI说明数据 ==========
-  const [aiExplain, setAiExplain] = useState({});
+  // ========== 竞品状态 ==========
+  const [competitors, setCompetitors] = useState([
+    { mode: 'url', url: '', images: [], data: null, loading: false, success: false, error: '' },
+    { mode: 'url', url: '', images: [], data: null, loading: false, success: false, error: '' },
+    { mode: 'url', url: '', images: [], data: null, loading: false, success: false, error: '' }
+  ]);
+  const [extractingIndex, setExtractingIndex] = useState(null);
+  const fileInputRefs = [useRef(null), useRef(null), useRef(null)];
+
+  // ========== 生成状态 ==========
+  const [generatedData, setGeneratedData] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+
+  // ========== 模块状态 ==========
+  const [moduleStatus, setModuleStatus] = useState({});
+  const [editingModule, setEditingModule] = useState(null);
+  const [regeneratingModule, setRegeneratingModule] = useState(null);
 
   // ========== 保存状态 ==========
-  const [savingDraft, setSavingDraft] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // ========== 展开/收起状态 ==========
-  const [showCompetitorDetails, setShowCompetitorDetails] = useState(false);
-
-  // ========== 计算步骤完成状态 ==========
-  const step1Done = Boolean(
-    category && market && platform && 
-    coreSellingPoint && conceptIngredient
-  );
-  
-  const successfulExtracts = competitors.filter(c => c.success && c.data).length;
-  const step2Done = successfulExtracts >= 1;
-  
-  const step3Done = Boolean(
-    formData.name_zh || formData.name_en || formData.name_id ||
-    formData.positioning || formData.selling_point
-  );
-
-  // ========== 竞品操作 ==========
+  // ========== 辅助函数 ==========
   const updateCompetitor = (index, updates) => {
-    setCompetitors(prev => {
-      const newList = [...prev];
-      newList[index] = { ...newList[index], ...updates };
-      return newList;
+    setCompetitors(prev => prev.map((c, i) => i === index ? { ...c, ...updates } : c));
+  };
+
+  const updateModuleStatus = (moduleId, status) => {
+    setModuleStatus(prev => ({ ...prev, [moduleId]: status }));
+  };
+
+  // 文件转 base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
   };
 
-  const addCompetitor = () => {
-    if (competitors.length >= 3) return;
-    setCompetitors(prev => [
-      ...prev,
-      {
-        mode: "url",
-        url: "",
-        images: [],
-        imagePreviews: [],
-        hint: "",
-        loading: false,
-        success: false,
-        error: "",
-        data: null
-      }
+  // 超时包装
+  const withTimeout = (promise, ms) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时')), ms))
     ]);
   };
 
-  const removeCompetitor = (index) => {
-    if (competitors.length <= 1) return;
-    setCompetitors(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // ========== 提取单个竞品 ==========
-  const handleExtractOne = async (index) => {
+  // ========== 竞品提取 ==========
+  const handleExtractCompetitor = async (index) => {
     const comp = competitors[index];
     
-    // 构建输入
-    let input;
-    if (comp.mode === "url") {
+    // URL 模式
+    if (comp.mode === 'url') {
       if (!comp.url) return;
-      input = comp.url;
-    } else {
-      if (comp.images.length === 0) return;
-      // 转换图片为base64
-      const imageData = [];
-      for (const file of comp.images) {
-        const dataUrl = await fileToDataUrl(file);
-        const base64 = dataUrl.split(",")[1];
-        imageData.push({
-          data: base64,
-          mime_type: file.type
-        });
-      }
-      input = {
-        mode: "image",
-        images: imageData,
-        hint: comp.hint || ""
-      };
-    }
-
-    updateCompetitor(index, { loading: true, error: "", success: false });
-    setExtractingAny(true);
-
-    try {
-      const result = await withTimeout(
-        extractCompetitorInfo(input, AI_CONFIG),
-        90000
-      );
       
-      updateCompetitor(index, {
-        loading: false,
-        success: true,
-        data: result,
-        error: ""
+      // 验证URL格式
+      const urlPattern = /^https?:\/\/.+/i;
+      if (!urlPattern.test(comp.url.trim())) {
+        updateCompetitor(index, { error: '请输入有效的商品链接（以 http:// 或 https:// 开头）' });
+        return;
+      }
+      
+      setExtractingIndex(index);
+      updateCompetitor(index, { loading: true, error: '', success: false, data: null });
+
+      try {
+        const result = await withTimeout(
+          extractCompetitorInfo(comp.url.trim(), AI_CONFIG),
+          90000
+        );
+        
+        // 验证返回数据
+        const listing = result?.listing || result;
+        const hasValidData = listing && (listing.title || listing.name || listing.price || listing.ingredients);
+        
+        if (!hasValidData) {
+          updateCompetitor(index, {
+            loading: false,
+            success: false,
+            error: '未能提取到有效信息，请检查链接'
+          });
+        } else {
+          updateCompetitor(index, {
+            loading: false,
+            success: true,
+            data: {
+              name: listing.title || listing.name || '',
+              price: listing.price || '',
+              volume: listing.volume || listing.size || '',
+              ingredients: listing.ingredients || '',
+              benefits: listing.benefits || listing.highlights || [],
+              imageUrl: listing.image || listing.main_image || null
+            },
+            error: ''
+          });
+        }
+      } catch (err) {
+        updateCompetitor(index, {
+          loading: false,
+          success: false,
+          error: err.message || '提取失败'
+        });
+      } finally {
+        setExtractingIndex(null);
+      }
+    } 
+    // 图片模式
+    else {
+      if (comp.images.length === 0) return;
+      
+      setExtractingIndex(index);
+      updateCompetitor(index, { loading: true, error: '', success: false, data: null });
+
+      try {
+        const imageData = [];
+        for (const file of comp.images) {
+          const dataUrl = await fileToBase64(file);
+          const base64 = dataUrl.split(',')[1];
+          imageData.push({
+            data: base64,
+            mime_type: file.type
+          });
+        }
+
+        const result = await withTimeout(
+          extractCompetitorInfo({ mode: 'image', images: imageData }, AI_CONFIG),
+          90000
+        );
+        
+        const listing = result?.listing || result;
+        const hasValidData = listing && (listing.title || listing.name || listing.price || listing.ingredients);
+        
+        if (!hasValidData) {
+          updateCompetitor(index, {
+            loading: false,
+            success: false,
+            error: '未能从图片提取到有效信息'
+          });
+        } else {
+          updateCompetitor(index, {
+            loading: false,
+            success: true,
+            data: {
+              name: listing.title || listing.name || '',
+              price: listing.price || '',
+              volume: listing.volume || listing.size || '',
+              ingredients: listing.ingredients || '',
+              benefits: listing.benefits || listing.highlights || [],
+              imageUrl: null
+            },
+            error: ''
+          });
+        }
+      } catch (err) {
+        updateCompetitor(index, {
+          loading: false,
+          success: false,
+          error: err.message || '提取失败'
+        });
+      } finally {
+        setExtractingIndex(null);
+      }
+    }
+  };
+
+  // ========== 图片上传处理 ==========
+  const handleImageUpload = (index, files) => {
+    if (files && files.length > 0) {
+      const fileArray = Array.from(files).slice(0, 3); // 最多3张
+      updateCompetitor(index, { 
+        images: fileArray, 
+        mode: 'image',
+        success: false, 
+        data: null, 
+        error: '' 
       });
-    } catch (err) {
-      updateCompetitor(index, {
-        loading: false,
-        success: false,
-        error: err.message || "提取失败"
-      });
-    } finally {
-      setExtractingAny(false);
     }
   };
 
   // ========== 生成产品方案 ==========
   const handleGenerate = async () => {
-    if (!step1Done || !step2Done) {
-      alert("请先完成基础信息填写和至少一个竞品提取");
+    const hasCompetitorData = competitors.some(c => c.success && c.data);
+    if (!hasCompetitorData) {
+      alert('请至少提取1条竞品数据');
       return;
     }
 
     setIsGenerating(true);
-    setGenerateError("");
-
-    try {
-      // 收集竞品数据 - 转换为后端期望的格式
-      const competitorsData = competitors
-        .filter(c => c.success && c.data)
-        .map(c => {
-          const d = c.data || {};
-          const listing = d.listing || d;
-          return {
-            name: listing.title || listing.name || d.name || "",
-            price: listing.price || d.price || "",
-            ingredients: listing.ingredients || d.ingredients || "",
-            benefits: listing.benefits || d.benefits || [],
-            source_url: c.url || listing.url || ""
-          };
-        });
-
-      const payload = {
-        // 品牌信息
-        brandName,
-        brandPhilosophy,
-        // 核心输入（手动）
-        coreSellingPoint,
-        conceptIngredient,
-        volume: manualVolume,
-        pricing: manualPricing,
-        // 市场信息
-        category,
-        market,
-        platform,
-        // 竞品数据（已转换格式）
-        competitors: competitorsData,
-        ai_config: AI_CONFIG
-      };
-
-      console.log("📤 发送生成请求:", payload);
-
-      const result = await withTimeout(
-        generateProductPlan(payload),
-        120000
-      );
-
-      console.log("📥 收到生成结果:", result);
-
-      // 解析结果并填充表单 - 修复：正确读取 result.data.plan
-      if (result && result.success !== false) {
-        const planData = result.data || result;
-        console.log("📦 planData:", planData);
-        
-        const plan = safeJson(planData.plan) || planData.plan || planData;
-        console.log("📋 plan:", plan);
-        
-        const explanations = safeJson(planData.explanations) || planData.explanations || {};
-        console.log("💡 explanations:", explanations);
-
-        const newFormValues = {
-          // 模块1: 产品名称
-          name_zh: plan.productName?.zh || plan.name_zh || "",
-          name_en: plan.productName?.en || plan.name_en || "",
-          name_id: plan.productName?.id || plan.name_id || "",
-          // 模块2: 产品定位
-          positioning: plan.positioning?.value || plan.positioning || "",
-          // 模块3: 卖点简介
-          selling_point: plan.productIntro?.zh || plan.selling_point || plan.sellingPoint || "",
-          // 模块4: 主要成分
-          ingredients: formatIngredients(plan.ingredientCombos || plan.ingredients),
-          // 模块5: 主打功效
-          efficacy: formatBenefits(plan.mainBenefits || plan.efficacy),
-          // 模块6: 香味
-          scent: plan.scent?.valueZh || plan.scent?.value || plan.scent || "",
-          // 模块7: 质地颜色
-          texture_color: plan.texture?.valueZh || plan.texture?.value || plan.texture_color || plan.color || "",
-          // 模块8: 定价策略
-          pricing: plan.pricing?.recommended || plan.pricing?.value || plan.pricing || "",
-          // 模块9: 产品标题
-          title: plan.productTitle?.value || plan.title || "",
-          keywords: Array.isArray(plan.keywords) ? plan.keywords.join(", ") : (plan.keywords?.value || plan.keywords || ""),
-          // 隐藏字段
-          volume: plan.volume || manualVolume || "",
-          packaging_requirements: plan.packaging?.requirements || plan.packaging_requirements || plan.packaging || ""
-        };
-        
-        console.log("📝 将要设置的表单数据:", newFormValues);
-        
-        setFormData(prev => ({
-          ...prev,
-          ...newFormValues
-        }));
-        
-        console.log("✅ setFormData 已调用");
-
-        // 设置AI说明 - 优先用 explanations，其次用 plan 里的字段
-        setAiExplain({
-          productName: {
-            note: plan.productName?.aiNote || explanations.productName?.note,
-            confidence: plan.productName?.confidence || explanations.productName?.confidence
-          },
-          positioning: {
-            note: plan.positioning?.aiNote || explanations.positioning?.note,
-            reason: plan.positioning?.reason || explanations.positioning?.reason,
-            confidence: plan.positioning?.confidence || explanations.positioning?.confidence
-          },
-          selling_point: {
-            note: plan.productIntro?.aiNote || explanations.sellingPoint?.note || explanations.selling_point?.note,
-            reason: plan.productIntro?.reason || explanations.sellingPoint?.reason,
-            confidence: plan.productIntro?.confidence || explanations.sellingPoint?.confidence
-          },
-          ingredients: {
-            note: plan.ingredientCombos?.aiNote || explanations.ingredients?.note,
-            reason: plan.ingredientCombos?.reason || explanations.ingredients?.reason,
-            confidence: plan.ingredientCombos?.confidence || explanations.ingredients?.confidence
-          },
-          efficacy: {
-            note: plan.mainBenefits?.aiNote || explanations.efficacy?.note,
-            reason: plan.mainBenefits?.reason || explanations.efficacy?.reason,
-            confidence: plan.mainBenefits?.confidence || explanations.efficacy?.confidence
-          },
-          scent: {
-            note: plan.scent?.aiNote || explanations.scent?.note,
-            reason: plan.scent?.reason || explanations.scent?.reason,
-            confidence: plan.scent?.confidence || explanations.scent?.confidence
-          },
-          texture_color: {
-            note: plan.texture?.aiNote || explanations.color?.note || explanations.texture_color?.note,
-            reason: plan.texture?.reason || explanations.color?.reason,
-            confidence: plan.texture?.confidence || explanations.color?.confidence
-          },
-          pricing: {
-            note: plan.pricing?.aiNote || explanations.pricing?.note,
-            reason: plan.pricing?.reason || explanations.pricing?.reason,
-            confidence: plan.pricing?.confidence || explanations.pricing?.confidence
-          },
-          title: {
-            note: plan.productTitle?.aiNote || explanations.title?.note,
-            reason: plan.productTitle?.reason || explanations.title?.reason,
-            confidence: plan.productTitle?.confidence || explanations.title?.confidence
-          }
-        });
-        
-        console.log("✅ 数据设置完成，step3Done 应该变为 true");
-      } else {
-        console.log("❌ result.success 为 false 或 result 为空");
-        setGenerateError("AI 返回数据为空");
-      }
-    } catch (err) {
-      console.error("❌ 生成出错:", err);
-      setGenerateError(err.message || "生成失败，请重试");
-    } finally {
-      console.log("🏁 生成流程结束，isGenerating 设为 false");
-      setIsGenerating(false);
-    }
-  };
-
-  // 格式化成分列表
-  const formatIngredients = (data) => {
-    if (!data) return "";
-    if (typeof data === "string") return data;
-    if (Array.isArray(data.items)) {
-      return data.items.map(item => {
-        const name = item.ingredient?.zh || item.ingredient?.en || item.name || item;
-        return typeof name === "string" ? name : JSON.stringify(name);
-      }).join(", ");
-    }
-    if (Array.isArray(data)) {
-      return data.map(item => {
-        if (typeof item === "string") return item;
-        return item.ingredient?.zh || item.ingredient?.en || item.name || "";
-      }).join(", ");
-    }
-    return "";
-  };
-
-  // 格式化功效列表
-  const formatBenefits = (data) => {
-    if (!data) return "";
-    if (typeof data === "string") return data;
-    if (Array.isArray(data.items)) {
-      return data.items.map(item => item.zh || item.en || item).join("\n");
-    }
-    if (Array.isArray(data)) {
-      return data.map(item => {
-        if (typeof item === "string") return item;
-        return item.zh || item.en || "";
-      }).join("\n");
-    }
-    return "";
-  };
-
-  // ========== 保存草稿 ==========
-  const handleSaveDraft = async () => {
-    // 验证必填
-    if (!category || !market || !platform) {
-      alert("请先完成基础信息填写");
-      return;
-    }
-    if (!formData.name_zh && !formData.name_en && !formData.name_id) {
-      alert("请至少填写一个产品名称");
-      return;
-    }
-
-    setSavingDraft(true);
+    setGenerateError('');
 
     try {
       // 收集竞品数据
       const competitorsData = competitors
         .filter(c => c.success && c.data)
         .map(c => ({
-          mode: c.mode,
-          url: c.url || null,
-          data: c.data
+          name: c.data.name || '',
+          price: c.data.price || '',
+          volume: c.data.volume || '',
+          ingredients: c.data.ingredients || '',
+          benefits: c.data.benefits || [],
+          source_url: c.url || ''
         }));
 
-      // 当前年月
+      const payload = {
+        brandName: formData.brandName,
+        brandPhilosophy: formData.brandPhilosophy,
+        coreSellingPoint: formData.coreSellingPoint,
+        conceptIngredient: formData.conceptIngredient,
+        volume: formData.volume,
+        pricing: formData.pricing,
+        category: formData.category,
+        market: formData.market,
+        platform: formData.platform,
+        competitors: competitorsData,
+        ai_config: AI_CONFIG
+      };
+
+      console.log('📤 发送生成请求:', payload);
+
+      const result = await withTimeout(generateProductPlan(payload), 120000);
+      
+      console.log('📥 收到生成结果:', result);
+
+      if (result && result.success !== false) {
+        const planData = result.data || result;
+        const plan = planData.plan || planData;
+        const explanations = planData.explanations || {};
+
+        // 将后端返回数据转换为 UI 需要的格式
+        const formattedData = formatGeneratedData(plan, explanations, competitorsData);
+        setGeneratedData(formattedData);
+      } else {
+        setGenerateError(result?.error || 'AI 返回数据为空');
+      }
+    } catch (err) {
+      console.error('生成失败:', err);
+      setGenerateError(err.message || '生成失败，请重试');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 格式化生成数据为 UI 需要的结构
+  const formatGeneratedData = (plan, explanations, competitorsData) => {
+    // 计算竞品价格区间
+    const prices = competitorsData
+      .map(c => c.price)
+      .filter(p => p)
+      .map(p => {
+        const num = parseFloat(p.replace(/[^0-9.]/g, ''));
+        return isNaN(num) ? 0 : num;
+      })
+      .filter(n => n > 0);
+    
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    const medianPrice = prices.length > 0 ? prices.sort((a, b) => a - b)[Math.floor(prices.length / 2)] : 0;
+
+    // 提取共同成分
+    const allIngredients = competitorsData
+      .map(c => c.ingredients)
+      .filter(i => i)
+      .join(', ')
+      .split(/[,，]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    const uniqueIngredients = [...new Set(allIngredients)].slice(0, 4);
+
+    return {
+      // 竞品分析摘要
+      competitorAnalysis: {
+        priceRange: { 
+          min: minPrice ? `IDR ${minPrice.toLocaleString()}` : '-', 
+          max: maxPrice ? `IDR ${maxPrice.toLocaleString()}` : '-', 
+          median: medianPrice ? `IDR ${medianPrice.toLocaleString()}` : '-'
+        },
+        commonIngredients: uniqueIngredients.length > 0 ? uniqueIngredients : ['未提取到成分'],
+        gaps: ['待分析差异化机会'],
+        confidence: explanations.positioning?.confidence ? Math.round(explanations.positioning.confidence * 100) : 85
+      },
+
+      // 1. 产品名称
+      productName: {
+        options: [
+          {
+            id: `${formData.conceptIngredient || 'Natural'} ${formData.coreSellingPoint || 'Care'} ${formData.category}`,
+            zh: `${formData.conceptIngredient || '天然'}${formData.coreSellingPoint || '护理'}${getCategoryZh(formData.category)}`,
+            formula: `${formData.conceptIngredient}(成分) + ${formData.coreSellingPoint}(卖点) + ${formData.category}(品类)`,
+            reason: '基于输入的核心卖点和概念成分组合',
+            isRecommended: true
+          }
+        ],
+        aiNote: plan.positioning ? '基于竞品分析和市场定位生成' : '基于输入信息生成',
+        reason: '依据竞品标题高频词分析',
+        confidence: 85
+      },
+
+      // 2. 产品定位
+      positioning: {
+        value: plan.positioning || `${formData.coreSellingPoint} product for ${formData.market} market`,
+        valueZh: plan.positioning || `针对${formData.market}市场的${formData.coreSellingPoint}产品`,
+        aiNote: explanations.positioning?.note || 'AI 基于竞品分析生成的定位建议',
+        reason: explanations.positioning?.reason || '基于竞品分析和市场需求',
+        confidence: explanations.positioning?.confidence ? Math.round(explanations.positioning.confidence * 100) : 90
+      },
+
+      // 3. 卖点简介
+      productIntro: {
+        en: plan.sellingPoint || 'Product description to be generated.',
+        zh: plan.sellingPoint || '产品描述待生成。',
+        structure: {
+          painPoint: '待分析',
+          mechanism: plan.ingredients || '待分析',
+          experience: '待分析',
+          audience: '待分析'
+        },
+        aiNote: explanations.sellingPoint?.note || 'AI 生成的卖点描述',
+        reason: explanations.sellingPoint?.reason || '基于竞品卖点分析',
+        confidence: explanations.sellingPoint?.confidence ? Math.round(explanations.sellingPoint.confidence * 100) : 88
+      },
+
+      // 4. 概念成分组合
+      ingredientCombos: {
+        items: parseIngredients(plan.ingredients || formData.conceptIngredient),
+        aiNote: explanations.ingredients?.note || 'AI 推荐的成分组合',
+        reason: explanations.ingredients?.reason || '基于竞品成分分析',
+        confidence: explanations.ingredients?.confidence ? Math.round(explanations.ingredients.confidence * 100) : 90
+      },
+
+      // 5. 主打功效
+      mainBenefits: {
+        items: parseBenefits(plan.efficacy || formData.coreSellingPoint),
+        aiNote: explanations.efficacy?.note || 'AI 推荐的功效表达',
+        reason: explanations.efficacy?.reason || '基于市场热搜词',
+        confidence: explanations.efficacy?.confidence ? Math.round(explanations.efficacy.confidence * 100) : 87
+      },
+
+      // 6. 香味
+      scent: {
+        value: plan.scent || 'Fresh herbal',
+        valueZh: plan.scent || '清新草本香',
+        aiNote: explanations.scent?.note || 'AI 推荐的香味方向',
+        reason: explanations.scent?.reason || '基于市场偏好分析',
+        confidence: explanations.scent?.confidence ? Math.round(explanations.scent.confidence * 100) : 85
+      },
+
+      // 7. 料体颜色
+      bodyColor: {
+        primary: { en: plan.color || 'Translucent gel', zh: plan.color || '透明啫喱' },
+        alternative: { en: 'Clear liquid', zh: '透明液体' },
+        aiNote: explanations.color?.note || 'AI 推荐的料体颜色',
+        reason: explanations.color?.reason || '基于品类惯例',
+        confidence: explanations.color?.confidence ? Math.round(explanations.color.confidence * 100) : 83
+      },
+
+      // 8. 定价策略
+      pricingStrategy: {
+        anchor: plan.pricing || formData.pricing || 'IDR 89,900',
+        flash: 'IDR 69,900',
+        bundle: 'IDR 159,000 (2 bottles)',
+        competitorPrices: competitorsData.map((c, i) => `竞品#${i + 1}: ${c.price || '-'}`).join(' | '),
+        aiNote: explanations.pricing?.note || 'AI 推荐的定价策略',
+        reason: explanations.pricing?.reason || '基于竞品价格分析',
+        confidence: explanations.pricing?.confidence ? Math.round(explanations.pricing.confidence * 100) : 90
+      },
+
+      // 9. 产品标题
+      productTitles: {
+        options: [
+          {
+            value: plan.title || `${formData.brandName} ${formData.conceptIngredient} ${formData.coreSellingPoint} ${formData.category} ${formData.volume || '300ml'}`,
+            valueZh: plan.title || `${formData.brandName} ${formData.conceptIngredient} ${formData.coreSellingPoint} ${getCategoryZh(formData.category)}`,
+            charCount: (plan.title || '').length || 150,
+            keywordLayout: `${formData.conceptIngredient}, ${formData.coreSellingPoint}`,
+            isRecommended: true
+          }
+        ],
+        aiNote: explanations.title?.note || 'SEO 优化的产品标题',
+        reason: explanations.title?.reason || '前40字符包含核心关键词',
+        confidence: explanations.title?.confidence ? Math.round(explanations.title.confidence * 100) : 92
+      },
+
+      // 10. 搜索关键词
+      searchKeywords: {
+        primary: Array.isArray(plan.keywords) ? plan.keywords.slice(0, 3) : [formData.category, formData.coreSellingPoint, formData.conceptIngredient].filter(Boolean),
+        secondary: [],
+        longtail: [],
+        aiNote: explanations.keywords?.note || 'AI 推荐的搜索关键词',
+        reason: explanations.keywords?.reason || '基于平台搜索趋势',
+        confidence: explanations.keywords?.confidence ? Math.round(explanations.keywords.confidence * 100) : 88
+      },
+
+      // 数据来源说明
+      dataSourceNote: {
+        conceptBasis: `基于${competitorsData.length}条竞品链接提取分析`,
+        keywordBasis: '非精准搜索量数据，依据品牌常用表达、竞品高频词',
+        verificationTip: '如需验证热搜量，建议使用 Shopee 关键词工具拉取实时数据'
+      }
+    };
+  };
+
+  // 辅助函数：获取类目中文名
+  const getCategoryZh = (cat) => {
+    const map = {
+      'Shampoo': '洗发水',
+      'Conditioner': '护发素',
+      'BodyWash': '沐浴露',
+      'BodyLotion': '身体乳',
+      'HairMask': '发膜',
+      'HairSerum': '护发精油'
+    };
+    return map[cat] || cat;
+  };
+
+  // 辅助函数：解析成分
+  const parseIngredients = (ingredientsStr) => {
+    if (!ingredientsStr) return [];
+    const items = ingredientsStr.split(/[,，]/).map(s => s.trim()).filter(s => s);
+    return items.slice(0, 4).map(item => ({
+      ingredient: { en: item, id: item, zh: item },
+      percentage: '0.5-1%',
+      benefits: [{ en: 'Benefit', id: 'Manfaat', zh: '功效' }],
+      source: '竞品分析'
+    }));
+  };
+
+  // 辅助函数：解析功效
+  const parseBenefits = (efficacyStr) => {
+    if (!efficacyStr) return [];
+    const items = efficacyStr.split(/[,，\n]/).map(s => s.trim()).filter(s => s);
+    return items.slice(0, 4).map(item => ({
+      en: item,
+      id: item,
+      zh: item
+    }));
+  };
+
+  // ========== 保存草稿 ==========
+  const handleSaveDraft = async () => {
+    if (!generatedData) {
+      alert('请先生成产品方案');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
       const now = new Date();
-      const developMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const developMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      // 收集竞品数据
+      const competitorsData = competitors
+        .filter(c => c.success && c.data)
+        .map(c => ({ ...c.data, url: c.url }));
 
       const draftData = {
         develop_month: developMonth,
-        category,
-        market,
-        platform,
+        category: formData.category,
+        market: formData.market,
+        platform: formData.platform,
+        
         // 品牌信息
-        brand_name: brandName || null,
-        brand_philosophy: brandPhilosophy || null,
-        // 核心输入（手动）
-        core_selling_point: coreSellingPoint || null,
-        concept_ingredient: conceptIngredient || null,
+        brand_name: formData.brandName,
+        brand_philosophy: formData.brandPhilosophy,
+        core_selling_point: formData.coreSellingPoint,
+        concept_ingredient: formData.conceptIngredient,
+        
+        // 三语名称
+        name_zh: generatedData.productName?.options?.[0]?.zh || '',
+        name_en: generatedData.productName?.options?.[0]?.id || '',
+        name_id: generatedData.productName?.options?.[0]?.id || '',
+        
         // 9模块数据
-        name_zh: formData.name_zh || null,
-        name_en: formData.name_en || null,
-        name_id: formData.name_id || null,
-        positioning: formData.positioning || null,
-        selling_point: formData.selling_point || null,
-        ingredients: formData.ingredients || null,
-        efficacy: formData.efficacy || null,
-        scent: formData.scent || null,
-        texture_color: formData.texture_color || null,
-        pricing: formData.pricing || manualPricing || null,
-        title: formData.title || null,
-        keywords: formData.keywords || null,
-        volume: formData.volume || manualVolume || null,
-        packaging_requirements: formData.packaging_requirements || null,
-        // AI元数据
+        positioning: generatedData.positioning?.valueZh || generatedData.positioning?.value || '',
+        selling_point: generatedData.productIntro?.zh || generatedData.productIntro?.en || '',
+        ingredients: generatedData.ingredientCombos?.items?.map(i => i.ingredient?.zh || i.ingredient?.en).join(', ') || '',
+        efficacy: generatedData.mainBenefits?.items?.map(i => i.zh || i.en).join('\n') || '',
+        scent: generatedData.scent?.valueZh || generatedData.scent?.value || '',
+        texture_color: generatedData.bodyColor?.primary?.zh || generatedData.bodyColor?.primary?.en || '',
+        pricing: generatedData.pricingStrategy?.anchor || '',
+        title: generatedData.productTitles?.options?.[0]?.value || '',
+        keywords: generatedData.searchKeywords?.primary?.join(', ') || '',
+        volume: formData.volume || '',
+        
+        // AI 元数据
         extract_provider: AI_CONFIG.extract_provider,
         generate_provider: AI_CONFIG.generate_provider,
         competitors_data: competitorsData,
-        ai_explanations: aiExplain,
-        estimated_cost: 0,
+        ai_explanations: {
+          positioning: generatedData.positioning,
+          productIntro: generatedData.productIntro,
+          ingredients: generatedData.ingredientCombos,
+          benefits: generatedData.mainBenefits,
+          scent: generatedData.scent,
+          color: generatedData.bodyColor,
+          pricing: generatedData.pricingStrategy,
+          title: generatedData.productTitles,
+          keywords: generatedData.searchKeywords
+        },
+        
         // 用户信息
         created_by: currentUser?.id || 1,
         created_at: getCurrentBeijingISO()
       };
 
       await insertAIDraft(draftData);
-
-      alert("✅ 草稿保存成功！\n\n请前往「AI 草稿」Tab 查看，管理员审核通过后将自动创建产品。");
+      
+      alert('✅ 草稿保存成功！\n\n请前往「AI 草稿」Tab 查看，管理员审核通过后将自动创建产品。');
       onSuccess?.();
       onClose?.();
     } catch (err) {
+      console.error('保存失败:', err);
       alert(`保存失败：${err.message}`);
     } finally {
-      setSavingDraft(false);
+      setIsSaving(false);
     }
   };
 
-  // ==================== 渲染 ====================
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 backdrop-blur-sm py-8">
-      <div className="relative w-[95vw] max-w-5xl rounded-3xl bg-gradient-to-b from-zinc-50 to-white shadow-2xl">
-        {/* 头部 */}
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 rounded-t-3xl border-b border-zinc-200 bg-white/95 backdrop-blur px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-lg font-bold text-zinc-900">AI 智能创建产品</div>
-              <div className="text-xs text-zinc-500">9模块产品方案生成 · 千问AI驱动</div>
+  // ========== 模拟重新生成单个模块 ==========
+  const handleRegenerate = (moduleId) => {
+    setRegeneratingModule(moduleId);
+    setTimeout(() => {
+      setRegeneratingModule(null);
+    }, 1500);
+  };
+
+  // 计算已提取竞品数量
+  const extractedCount = competitors.filter(c => c.success).length;
+
+  // ==================== UI 组件 ====================
+  
+  // 置信度徽章
+  const ConfidenceBadge = ({ value }) => {
+    const getStyle = (v) => {
+      if (v >= 90) return { bg: '#065f46', text: '#6ee7b7', label: '高' };
+      if (v >= 80) return { bg: '#166534', text: '#86efac', label: '中高' };
+      if (v >= 70) return { bg: '#854d0e', text: '#fde047', label: '中' };
+      return { bg: '#991b1b', text: '#fca5a5', label: '低' };
+    };
+    const style = getStyle(value);
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '4px 10px',
+        borderRadius: '6px',
+        backgroundColor: style.bg,
+        color: style.text,
+        fontSize: '12px',
+        fontWeight: '600'
+      }}>
+        置信度 {value}%
+      </div>
+    );
+  };
+
+  // 状态选择器
+  const StatusSelector = ({ moduleId, currentStatus }) => {
+    const statuses = [
+      { key: 'pending', label: '待审核', color: '#64748b', bg: '#334155' },
+      { key: 'approved', label: '已确认', color: '#10b981', bg: '#065f46' },
+      { key: 'needsRevision', label: '需修改', color: '#f59e0b', bg: '#854d0e' }
+    ];
+    const current = currentStatus || 'pending';
+
+    return (
+      <div style={{ 
+        display: 'flex', 
+        gap: '6px',
+        padding: '8px 0',
+        borderTop: '1px solid #2d2d44',
+        marginTop: '12px'
+      }}>
+        {statuses.map(s => (
+          <button
+            key={s.key}
+            onClick={() => updateModuleStatus(moduleId, s.key)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '6px',
+              border: current === s.key ? `2px solid ${s.color}` : '1px solid #334155',
+              backgroundColor: current === s.key ? s.bg : 'transparent',
+              color: current === s.key ? s.color : '#64748b',
+              fontSize: '11px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: current === s.key ? s.color : '#475569'
+            }}></span>
+            {s.label}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  // 模块卡片
+  const ModuleCard = ({ moduleId, number, title, confidence, aiNote, reason, children }) => {
+    const status = moduleStatus[moduleId] || 'pending';
+    const isRegenerating = regeneratingModule === moduleId;
+    const isEditing = editingModule === moduleId;
+    
+    const getBorderColor = () => {
+      if (status === 'approved') return '#10b981';
+      if (status === 'needsRevision') return '#f59e0b';
+      return '#2d2d44';
+    };
+
+    return (
+      <div style={{
+        backgroundColor: '#1a1a2e',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '16px',
+        border: `1px solid ${getBorderColor()}`,
+        position: 'relative',
+        opacity: isRegenerating ? 0.7 : 1,
+        transition: 'all 0.2s ease'
+      }}>
+        {isRegenerating && (
+          <div style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.8)',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10
+          }}>
+            <div style={{ color: '#a5b4fc', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
+              重新生成中...
             </div>
           </div>
+        )}
 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: '16px'
+        }}>
+          <h3 style={{
+            margin: 0,
+            fontSize: '15px',
+            fontWeight: '600',
+            color: '#e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <span style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              background: status === 'approved' 
+                ? 'linear-gradient(135deg, #059669, #10b981)'
+                : status === 'needsRevision'
+                ? 'linear-gradient(135deg, #d97706, #f59e0b)'
+                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '13px',
+              fontWeight: '700',
+              color: 'white'
+            }}>{number}</span>
+            {title}
+          </h3>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                onClick={() => setEditingModule(isEditing ? null : moduleId)}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid #334155',
+                  backgroundColor: isEditing ? '#312e81' : 'transparent',
+                  color: isEditing ? '#a5b4fc' : '#64748b',
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✏️ 编辑
+              </button>
+              <button
+                onClick={() => handleRegenerate(moduleId)}
+                disabled={isRegenerating}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid #334155',
+                  backgroundColor: 'transparent',
+                  color: '#64748b',
+                  fontSize: '11px',
+                  cursor: isRegenerating ? 'not-allowed' : 'pointer'
+                }}
+              >
+                🔄 重新生成
+              </button>
+            </div>
+            <ConfidenceBadge value={confidence} />
+          </div>
+        </div>
+        
+        <div style={{
+          padding: '12px',
+          borderRadius: '8px',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          marginBottom: '12px',
+          fontSize: '13px',
+          lineHeight: '1.5'
+        }}>
+          <span style={{ color: '#a5b4fc' }}>💡 AI说明：</span>
+          <span style={{ color: '#cbd5e1' }}> {aiNote}</span>
+        </div>
+
+        <div style={{
+          position: 'relative',
+          border: isEditing ? '2px dashed #6366f1' : 'none',
+          borderRadius: '8px',
+          padding: isEditing ? '8px' : 0
+        }}>
+          {isEditing && (
+            <div style={{
+              position: 'absolute',
+              top: '-10px',
+              left: '10px',
+              backgroundColor: '#6366f1',
+              color: 'white',
+              fontSize: '10px',
+              padding: '2px 6px',
+              borderRadius: '4px'
+            }}>
+              编辑模式
+            </div>
+          )}
+          {children}
+        </div>
+
+        <div style={{
+          marginTop: '12px',
+          padding: '12px',
+          borderRadius: '8px',
+          backgroundColor: 'rgba(30, 41, 59, 0.5)',
+          fontSize: '12px',
+          color: '#94a3b8',
+          lineHeight: '1.5'
+        }}>
+          <span style={{ color: '#f59e0b' }}>📊 理由：</span> {reason}
+        </div>
+
+        <StatusSelector moduleId={moduleId} currentStatus={status} />
+      </div>
+    );
+  };
+
+  // 值显示框
+  const ValueBox = ({ value, valueZh, subInfo }) => (
+    <div style={{
+      padding: '14px 16px',
+      borderRadius: '8px',
+      backgroundColor: '#0f172a',
+      border: '1px solid #334155'
+    }}>
+      <div style={{ fontSize: '15px', color: '#f1f5f9', fontWeight: '500', marginBottom: valueZh ? '6px' : 0 }}>
+        {value}
+      </div>
+      {valueZh && (
+        <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+          {valueZh}
+        </div>
+      )}
+      {subInfo && (
+        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #334155' }}>
+          {subInfo}
+        </div>
+      )}
+    </div>
+  );
+
+  // 竞品卡片
+  const CompetitorCard = ({ index, competitor }) => {
+    const { mode, url, images, data, loading, success, error } = competitor;
+    const isExtracting = extractingIndex === index;
+
+    return (
+      <div style={{
+        padding: '12px',
+        borderRadius: '10px',
+        backgroundColor: success ? '#0f2a1f' : '#1a1a2e',
+        border: success ? '1px solid #166534' : '1px solid #2d2d44',
+        marginBottom: '10px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          <span style={{
+            width: '22px',
+            height: '22px',
+            borderRadius: '50%',
+            backgroundColor: success ? '#166534' : '#334155',
+            color: success ? '#6ee7b7' : '#94a3b8',
+            fontSize: '12px',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>{index + 1}</span>
+          <span style={{ fontSize: '12px', color: success ? '#6ee7b7' : '#94a3b8', fontWeight: '500' }}>
+            竞品 {index + 1} {success ? '✓ 已提取' : ''}
+          </span>
+        </div>
+        
+        {/* 模式切换 */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
           <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 transition-colors"
+            onClick={() => updateCompetitor(index, { mode: 'url', images: [], success: false, data: null, error: '' })}
+            style={{
+              flex: 1,
+              padding: '8px',
+              borderRadius: '6px',
+              border: mode === 'url' ? '2px solid #6366f1' : '1px solid #334155',
+              backgroundColor: mode === 'url' ? '#312e81' : 'transparent',
+              color: mode === 'url' ? '#a5b4fc' : '#64748b',
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
           >
-            <X className="h-5 w-5" />
+            <Link size={14} /> 粘贴链接
+          </button>
+          <button
+            onClick={() => updateCompetitor(index, { mode: 'image', url: '', success: false, data: null, error: '' })}
+            style={{
+              flex: 1,
+              padding: '8px',
+              borderRadius: '6px',
+              border: mode === 'image' ? '2px solid #6366f1' : '1px solid #334155',
+              backgroundColor: mode === 'image' ? '#312e81' : 'transparent',
+              color: mode === 'image' ? '#a5b4fc' : '#64748b',
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <ImageIcon size={14} /> 上传截图
           </button>
         </div>
 
-        {/* 主体内容 */}
-        <div className="p-6 space-y-6">
-          {/* ========== Step 1: 基础信息 ========== */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-            <StepHeader
-              step={1}
-              title="基础信息"
-              subtitle="品牌信息、核心输入、市场定位"
-              done={step1Done}
-              active={!step1Done}
+        {/* URL 输入 */}
+        {mode === 'url' && (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: success ? '10px' : 0 }}>
+            <input
+              type="text"
+              placeholder="粘贴 Shopee 商品链接..."
+              value={url}
+              onChange={(e) => updateCompetitor(index, { url: e.target.value })}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: '1px solid #2d2d44',
+                backgroundColor: '#0f172a',
+                color: '#e2e8f0',
+                fontSize: '12px'
+              }}
             />
+            <button
+              onClick={() => handleExtractCompetitor(index)}
+              disabled={!url || isExtracting}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: isExtracting ? '#334155' : (success ? '#166534' : '#6366f1'),
+                color: 'white',
+                fontSize: '11px',
+                fontWeight: '500',
+                cursor: !url || isExtracting ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {isExtracting ? '提取中...' : (success ? '重新提取' : 'AI提取')}
+            </button>
+          </div>
+        )}
 
-            {/* 品牌信息 */}
-            <div className="mt-5 p-4 bg-zinc-50 rounded-xl">
-              <div className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">🏷️ 品牌信息</div>
-              <div className="grid gap-4 sm:grid-cols-2">
+        {/* 图片上传 */}
+        {mode === 'image' && (
+          <div style={{ marginBottom: success ? '10px' : 0 }}>
+            <input
+              type="file"
+              ref={fileInputRefs[index]}
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => handleImageUpload(index, e.target.files)}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => fileInputRefs[index].current?.click()}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '6px',
+                  border: '2px dashed #334155',
+                  backgroundColor: 'transparent',
+                  color: '#64748b',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Upload size={16} />
+                {images.length > 0 ? `已选择 ${images.length} 张图片` : '点击上传截图'}
+              </button>
+              {images.length > 0 && (
+                <button
+                  onClick={() => handleExtractCompetitor(index)}
+                  disabled={isExtracting}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: isExtracting ? '#334155' : '#6366f1',
+                    color: 'white',
+                    fontSize: '11px',
+                    fontWeight: '500',
+                    cursor: isExtracting ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isExtracting ? '提取中...' : 'AI提取'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 错误提示 */}
+        {error && (
+          <div style={{
+            padding: '8px',
+            borderRadius: '6px',
+            backgroundColor: '#450a0a',
+            color: '#fca5a5',
+            fontSize: '11px',
+            marginTop: '8px'
+          }}>
+            ❌ {error}
+          </div>
+        )}
+
+        {/* 提取结果 */}
+        {data && (
+          <div style={{
+            padding: '10px',
+            borderRadius: '6px',
+            backgroundColor: '#0f172a',
+            fontSize: '12px'
+          }}>
+            <div style={{ color: '#f1f5f9', fontWeight: '500', marginBottom: '6px' }}>{data.name}</div>
+            <div style={{ display: 'flex', gap: '12px', color: '#94a3b8', marginBottom: '6px' }}>
+              <span>💰 {data.price || '-'}</span>
+              <span>📦 {data.volume || '-'}</span>
+            </div>
+            {data.ingredients && (
+              <div style={{ color: '#64748b', fontSize: '11px' }}>
+                <span style={{ color: '#a5b4fc' }}>成分：</span>{data.ingredients}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
+  // ==================== 主渲染 ====================
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 50,
+      backgroundColor: '#0d0d1a',
+      color: '#e2e8f0',
+      fontFamily: "'Noto Sans SC', 'SF Pro Display', -apple-system, sans-serif",
+      overflow: 'hidden'
+    }}>
+      {/* Header */}
+      <header style={{
+        padding: '16px 32px',
+        borderBottom: '1px solid #1e1e2e',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#0d0d1a',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '18px'
+          }}>🧪</div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>AI 智能创建产品</h1>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+              9模块产品方案生成 · 千问AI驱动
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {generatedData && (
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px', 
+              marginRight: '12px',
+              padding: '8px 16px',
+              backgroundColor: '#1a1a2e',
+              borderRadius: '8px',
+              fontSize: '12px'
+            }}>
+              <span style={{ color: '#64748b' }}>
+                待审核: <span style={{ color: '#a5b4fc', fontWeight: '600' }}>
+                  {9 - Object.values(moduleStatus).filter(s => s === 'approved' || s === 'needsRevision').length}
+                </span>
+              </span>
+              <span style={{ color: '#64748b' }}>
+                已确认: <span style={{ color: '#10b981', fontWeight: '600' }}>
+                  {Object.values(moduleStatus).filter(s => s === 'approved').length}
+                </span>
+              </span>
+              <span style={{ color: '#64748b' }}>
+                需修改: <span style={{ color: '#f59e0b', fontWeight: '600' }}>
+                  {Object.values(moduleStatus).filter(s => s === 'needsRevision').length}
+                </span>
+              </span>
+            </div>
+          )}
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid #334155',
+              backgroundColor: 'transparent',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <X size={16} /> 关闭
+          </button>
+          {generatedData && (
+            <button
+              onClick={handleSaveDraft}
+              disabled={isSaving}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                background: isSaving ? '#334155' : 'linear-gradient(135deg, #059669, #10b981)',
+                color: 'white',
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {isSaving ? '⏳ 保存中...' : '💾 保存草稿'}
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div style={{ display: 'flex', height: 'calc(100vh - 69px)' }}>
+        {/* Left Panel - 输入区 */}
+        <div style={{
+          width: '400px',
+          borderRight: '1px solid #1e1e2e',
+          padding: '20px',
+          overflowY: 'auto',
+          backgroundColor: '#0d0d1a'
+        }}>
+          <h2 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '16px', color: '#a5b4fc' }}>
+            📝 输入信息
+          </h2>
+
+          {/* 品牌信息 */}
+          <div style={{
+            padding: '16px',
+            borderRadius: '10px',
+            backgroundColor: '#1a1a2e',
+            marginBottom: '12px'
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              🏷️ 品牌信息
+            </div>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>品牌名</label>
+                <input
+                  type="text"
+                  value={formData.brandName}
+                  onChange={(e) => setFormData({...formData, brandName: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #2d2d44',
+                    backgroundColor: '#0f172a',
+                    color: '#e2e8f0',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>品牌理念</label>
+                <input
+                  type="text"
+                  value={formData.brandPhilosophy}
+                  onChange={(e) => setFormData({...formData, brandPhilosophy: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #2d2d44',
+                    backgroundColor: '#0f172a',
+                    color: '#e2e8f0',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 核心输入 */}
+          <div style={{
+            padding: '16px',
+            borderRadius: '10px',
+            backgroundColor: '#1a1a2e',
+            marginBottom: '12px'
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              ✏️ 核心输入
+            </div>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  核心卖点 <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="如：防脱+清凉"
+                  value={formData.coreSellingPoint}
+                  onChange={(e) => setFormData({...formData, coreSellingPoint: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #2d2d44',
+                    backgroundColor: '#0f172a',
+                    color: '#e2e8f0',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  主概念成分 <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="如：Rosemary 迷迭香"
+                  value={formData.conceptIngredient}
+                  onChange={(e) => setFormData({...formData, conceptIngredient: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #2d2d44',
+                    backgroundColor: '#0f172a',
+                    color: '#e2e8f0',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">品牌名</label>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>容量</label>
                   <input
                     type="text"
-                    value={brandName}
-                    onChange={(e) => setBrandName(e.target.value)}
-                    placeholder="如：BIOAQUA"
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    placeholder="300ml"
+                    value={formData.volume}
+                    onChange={(e) => setFormData({...formData, volume: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #2d2d44',
+                      backgroundColor: '#0f172a',
+                      color: '#e2e8f0',
+                      fontSize: '13px',
+                      boxSizing: 'border-box'
+                    }}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">品牌理念</label>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>定价</label>
                   <input
                     type="text"
-                    value={brandPhilosophy}
-                    onChange={(e) => setBrandPhilosophy(e.target.value)}
-                    placeholder="如：自然科技，焕活秀发"
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    placeholder="IDR 89,900"
+                    value={formData.pricing}
+                    onChange={(e) => setFormData({...formData, pricing: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #2d2d44',
+                      backgroundColor: '#0f172a',
+                      color: '#e2e8f0',
+                      fontSize: '13px',
+                      boxSizing: 'border-box'
+                    }}
                   />
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* 核心输入（手动） */}
-            <div className="mt-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-              <div className="text-xs font-semibold text-indigo-600 mb-3 uppercase tracking-wide">✏️ 核心输入（必填）</div>
-              <div className="grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">
-                      核心卖点 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={coreSellingPoint}
-                      onChange={(e) => setCoreSellingPoint(e.target.value)}
-                      placeholder="如：防脱+清凉"
-                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">
-                      主概念成分 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={conceptIngredient}
-                      onChange={(e) => setConceptIngredient(e.target.value)}
-                      placeholder="如：Rosemary 迷迭香"
-                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">容量</label>
-                    <input
-                      type="text"
-                      value={manualVolume}
-                      onChange={(e) => setManualVolume(e.target.value)}
-                      placeholder="如：300ml"
-                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-zinc-700 mb-1.5 block">目标定价</label>
-                    <input
-                      type="text"
-                      value={manualPricing}
-                      onChange={(e) => setManualPricing(e.target.value)}
-                      placeholder="如：IDR 89,900"
-                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                    />
-                  </div>
-                </div>
-              </div>
+          {/* 市场信息 */}
+          <div style={{
+            padding: '16px',
+            borderRadius: '10px',
+            backgroundColor: '#1a1a2e',
+            marginBottom: '12px'
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              🌏 市场信息
             </div>
-
-            {/* 市场信息 */}
-            <div className="mt-4 p-4 bg-zinc-50 rounded-xl">
-              <div className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">🌏 市场信息</div>
-              <div className="grid gap-4 sm:grid-cols-3">
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>品类</label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({...formData, category: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #2d2d44',
+                    backgroundColor: '#0f172a',
+                    color: '#e2e8f0',
+                    fontSize: '13px'
+                  }}
+                >
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">产品类目</label>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>市场</label>
                   <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    value={formData.market}
+                    onChange={(e) => setFormData({...formData, market: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #2d2d44',
+                      backgroundColor: '#0f172a',
+                      color: '#e2e8f0',
+                      fontSize: '13px'
+                    }}
                   >
-                    <option value="">请选择</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {MARKETS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">目标市场</label>
+                  <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>平台</label>
                   <select
-                    value={market}
-                    onChange={(e) => setMarket(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
+                    value={formData.platform}
+                    onChange={(e) => setFormData({...formData, platform: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #2d2d44',
+                      backgroundColor: '#0f172a',
+                      color: '#e2e8f0',
+                      fontSize: '13px'
+                    }}
                   >
-                    <option value="">请选择</option>
-                    {MARKETS.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-zinc-700 mb-1.5 block">销售平台</label>
-                  <select
-                    value={platform}
-                    onChange={(e) => setPlatform(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-500 focus:ring-2"
-                  >
-                    <option value="">请选择</option>
-                    {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                    {PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ========== Step 2: 竞品提取 ========== */}
-          {step1Done && (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-              <StepHeader
-                step={2}
-                title="竞品提取"
-                subtitle={`支持链接或截图方式提取竞品信息（最多3个，已提取 ${successfulExtracts} 个）`}
-                done={step2Done}
-                active={step1Done && !step2Done}
-              />
-
-              <div className="mt-5 space-y-4">
-                {competitors.map((comp, index) => (
-                  <CompetitorCard
-                    key={index}
-                    index={index}
-                    competitor={comp}
-                    onUpdate={updateCompetitor}
-                    onExtract={handleExtractOne}
-                    onRemove={removeCompetitor}
-                    extracting={extractingAny}
-                  />
-                ))}
-
-                {competitors.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={addCompetitor}
-                    className="w-full py-3 border-2 border-dashed border-zinc-300 rounded-xl text-sm text-zinc-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    添加竞品（{competitors.length}/3）
-                  </button>
-                )}
-              </div>
+          {/* 竞品采集 */}
+          <div style={{
+            padding: '16px',
+            borderRadius: '10px',
+            backgroundColor: '#1a1a2e',
+            marginBottom: '16px',
+            border: '1px solid #6366f1'
+          }}>
+            <div style={{ 
+              fontSize: '11px', 
+              color: '#a5b4fc', 
+              marginBottom: '12px', 
+              fontWeight: '600', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              🔗 竞品采集（必填）
+              <span style={{
+                fontSize: '10px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                backgroundColor: '#312e81',
+                color: '#a5b4fc'
+              }}>至少1条 · 已提取{extractedCount}条</span>
             </div>
+            
+            {competitors.map((comp, index) => (
+              <CompetitorCard key={index} index={index} competitor={comp} />
+            ))}
+
+            {/* 竞品分析摘要 */}
+            {extractedCount > 0 && (
+              <div style={{
+                padding: '10px',
+                borderRadius: '6px',
+                backgroundColor: '#0f2a1f',
+                border: '1px solid #166534',
+                marginTop: '12px'
+              }}>
+                <div style={{ fontSize: '11px', color: '#6ee7b7', fontWeight: '600', marginBottom: '8px' }}>
+                  📊 竞品快速分析
+                </div>
+                <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: '1.6' }}>
+                  <div>• 已提取 {extractedCount} 条竞品数据</div>
+                  <div>• 点击生成后，AI 将分析竞品差异化机会</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 生成按钮 */}
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating || extractedCount === 0}
+            style={{
+              width: '100%',
+              padding: '14px',
+              borderRadius: '10px',
+              border: 'none',
+              background: (isGenerating || extractedCount === 0) 
+                ? '#334155' 
+                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: 'white',
+              fontSize: '15px',
+              fontWeight: '600',
+              cursor: (isGenerating || extractedCount === 0) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            {isGenerating ? '⚙️ AI 生成中...' : '🚀 生成产品方案'}
+          </button>
+          
+          {extractedCount === 0 && (
+            <p style={{ fontSize: '11px', color: '#64748b', textAlign: 'center', marginTop: '8px' }}>
+              请先提取至少1条竞品数据
+            </p>
           )}
 
-          {/* ========== Step 3: AI生成 ========== */}
-          {step2Done && (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-              <StepHeader
-                step={3}
-                title="AI 生成产品方案"
-                subtitle="基于竞品分析，智能生成9模块产品方案"
-                done={step3Done}
-                active={step2Done && !step3Done}
-              />
+          {generateError && (
+            <div style={{
+              marginTop: '12px',
+              padding: '10px',
+              borderRadius: '6px',
+              backgroundColor: '#450a0a',
+              color: '#fca5a5',
+              fontSize: '12px'
+            }}>
+              ❌ {generateError}
+            </div>
+          )}
+        </div>
 
-              <div className="mt-5">
-                {/* 竞品摘要 */}
-                <div className="mb-4 p-4 bg-zinc-50 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setShowCompetitorDetails(!showCompetitorDetails)}
-                    className="w-full flex items-center justify-between text-sm"
+        {/* Right Panel - 生成结果 */}
+        <div style={{
+          flex: 1,
+          padding: '20px 28px',
+          overflowY: 'auto',
+          backgroundColor: '#0d0d1a'
+        }}>
+          {!generatedData ? (
+            <div style={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#475569'
+            }}>
+              <div style={{ fontSize: '72px', marginBottom: '16px', opacity: 0.3 }}>🧪</div>
+              <p style={{ fontSize: '16px', fontWeight: '500' }}>填写左侧信息后点击生成</p>
+              <p style={{ fontSize: '13px', marginTop: '8px', color: '#334155' }}>
+                AI 将基于竞品分析 + 手动输入生成完整产品方案
+              </p>
+            </div>
+          ) : (
+            <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+              
+              {/* 竞品分析摘要 */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: '#1e1b4b',
+                border: '1px solid #3730a3',
+                marginBottom: '20px'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: '12px'
+                }}>
+                  <h3 style={{ margin: 0, fontSize: '14px', color: '#c4b5fd', fontWeight: '600' }}>
+                    🔍 竞品分析摘要
+                  </h3>
+                  <ConfidenceBadge value={generatedData.competitorAnalysis?.confidence || 85} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a' }}>
+                    <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>价格带</div>
+                    <div style={{ fontSize: '13px', color: '#f1f5f9' }}>
+                      {generatedData.competitorAnalysis?.priceRange?.min} - {generatedData.competitorAnalysis?.priceRange?.max}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      中位数: {generatedData.competitorAnalysis?.priceRange?.median}
+                    </div>
+                  </div>
+                  <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a' }}>
+                    <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>共同成分</div>
+                    <div style={{ fontSize: '12px', color: '#f1f5f9' }}>
+                      {generatedData.competitorAnalysis?.commonIngredients?.join(', ')}
+                    </div>
+                  </div>
+                  <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a' }}>
+                    <div style={{ fontSize: '10px', color: '#fbbf24', marginBottom: '4px' }}>⚡ 差异化机会</div>
+                    <div style={{ fontSize: '12px', color: '#fbbf24' }}>
+                      {generatedData.competitorAnalysis?.gaps?.join('、')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 双列布局模块 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                
+                {/* 1. 产品名称 - 跨两列 */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <ModuleCard
+                    moduleId="productName"
+                    number="1"
+                    title="产品名称 ⭐"
+                    confidence={generatedData.productName?.confidence || 85}
+                    aiNote={generatedData.productName?.aiNote || '基于市场分析生成'}
+                    reason={generatedData.productName?.reason || '依据竞品分析'}
                   >
-                    <span className="font-medium text-zinc-700">
-                      已提取 {successfulExtracts} 个竞品数据
-                    </span>
-                    {showCompetitorDetails ? (
-                      <ChevronUp className="h-4 w-4 text-zinc-500" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-zinc-500" />
-                    )}
-                  </button>
-
-                  {showCompetitorDetails && (
-                    <div className="mt-3 space-y-2">
-                      {competitors.filter(c => c.success && c.data).map((comp, idx) => (
-                        <div key={idx} className="text-xs text-zinc-600 p-2 bg-white rounded-lg">
-                          <div className="font-medium">{comp.data?.listing?.title || comp.data?.name || `竞品${idx + 1}`}</div>
-                          {comp.data?.listing?.price && (
-                            <div className="text-zinc-500 mt-0.5">价格: {comp.data.listing.price}</div>
-                          )}
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                      {generatedData.productName?.options?.map((opt, idx) => (
+                        <div key={idx} style={{
+                          padding: '14px',
+                          borderRadius: '8px',
+                          backgroundColor: '#0f172a',
+                          border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            {opt.isRecommended && (
+                              <span style={{
+                                fontSize: '10px',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: '#6366f1',
+                                color: 'white'
+                              }}>推荐</span>
+                            )}
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: '#1e293b',
+                              color: '#94a3b8'
+                            }}>{opt.formula}</span>
+                          </div>
+                          <div style={{ fontSize: '16px', color: '#f1f5f9', fontWeight: '600', marginBottom: '4px' }}>{opt.id}</div>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>{opt.zh}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            💡 {opt.reason}
+                          </div>
                         </div>
                       ))}
                     </div>
-                  )}
+                  </ModuleCard>
                 </div>
 
-                {/* 生成按钮 */}
-                <button
-                  type="button"
-                  onClick={handleGenerate}
-                  disabled={isGenerating}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                {/* 2. 产品定位 */}
+                <ModuleCard
+                  moduleId="positioning"
+                  number="2"
+                  title="产品定位"
+                  confidence={generatedData.positioning?.confidence || 90}
+                  aiNote={generatedData.positioning?.aiNote || '基于市场分析'}
+                  reason={generatedData.positioning?.reason || '竞品差异化定位'}
                 >
-                  {isGenerating ? (
-                    <>
-                      <Loader className="h-5 w-5 animate-spin" />
-                      AI 正在分析生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-5 w-5" />
-                      生成 9 模块产品方案
-                    </>
-                  )}
-                </button>
+                  <ValueBox
+                    value={generatedData.positioning?.value}
+                    valueZh={generatedData.positioning?.valueZh}
+                  />
+                </ModuleCard>
 
-                {generateError && (
-                  <div className="mt-3 p-3 bg-red-50 rounded-xl text-sm text-red-600 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    {generateError}
+                {/* 3. 卖点简介 */}
+                <ModuleCard
+                  moduleId="productIntro"
+                  number="3"
+                  title="卖点简介"
+                  confidence={generatedData.productIntro?.confidence || 88}
+                  aiNote={generatedData.productIntro?.aiNote || '电商详情页风格'}
+                  reason={generatedData.productIntro?.reason || '基于竞品文案分析'}
+                >
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <div style={{
+                      padding: '14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #2d2d44'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇬🇧 English</div>
+                      <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>
+                        {generatedData.productIntro?.en}
+                      </p>
+                    </div>
+                    <div style={{
+                      padding: '14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #2d2d44'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇨🇳 中文</div>
+                      <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>
+                        {generatedData.productIntro?.zh}
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
+                </ModuleCard>
 
-          {/* ========== Step 4: 9模块编辑 ========== */}
-          {step3Done && (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-              <StepHeader
-                step={4}
-                title="产品方案编辑"
-                subtitle="审核并编辑 AI 生成的 9 模块内容"
-                done={false}
-                active={true}
-              />
-
-              <div className="mt-5 space-y-4">
-                {/* 基础信息回显 */}
-                <div className="p-4 bg-zinc-50 rounded-xl">
-                  <div className="text-xs font-medium text-zinc-500 mb-2">基础信息</div>
-                  <div className="flex flex-wrap gap-3 text-sm">
-                    <span className="px-3 py-1 bg-white rounded-lg border border-zinc-200">{category}</span>
-                    <span className="px-3 py-1 bg-white rounded-lg border border-zinc-200">{market}</span>
-                    <span className="px-3 py-1 bg-white rounded-lg border border-zinc-200">{platform}</span>
-                  </div>
+                {/* 4. 概念成分 - 跨两列 */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <ModuleCard
+                    moduleId="ingredientCombos"
+                    number="4"
+                    title="概念成分组合"
+                    confidence={generatedData.ingredientCombos?.confidence || 90}
+                    aiNote={generatedData.ingredientCombos?.aiNote || 'AI推荐成分'}
+                    reason={generatedData.ingredientCombos?.reason || '基于竞品成分分析'}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      {generatedData.ingredientCombos?.items?.map((item, idx) => (
+                        <div key={idx} style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#0f172a',
+                          border: '1px solid #2d2d44'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <div>
+                              <div style={{ fontSize: '14px', color: '#a5b4fc', fontWeight: '600' }}>{item.ingredient?.en}</div>
+                              <div style={{ fontSize: '11px', color: '#64748b' }}>{item.ingredient?.id} | {item.ingredient?.zh}</div>
+                            </div>
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#312e81',
+                              color: '#a5b4fc'
+                            }}>{item.percentage}</span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#f59e0b', paddingTop: '6px', borderTop: '1px solid #2d2d44' }}>
+                            📎 {item.source}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ModuleCard>
                 </div>
 
-                {/* 模块1: 产品名称（三语） */}
-                <TrilingualNameField
-                  nameZh={formData.name_zh}
-                  nameEn={formData.name_en}
-                  nameId={formData.name_id}
-                  onChangeZh={(v) => setFormData(prev => ({ ...prev, name_zh: v }))}
-                  onChangeEn={(v) => setFormData(prev => ({ ...prev, name_en: v }))}
-                  onChangeId={(v) => setFormData(prev => ({ ...prev, name_id: v }))}
-                  aiNote={aiExplain.productName?.note}
-                  aiConfidence={aiExplain.productName?.confidence}
-                />
-
-                {/* 模块2: 产品定位 */}
-                <ModuleField
-                  label="产品定位"
-                  icon={Target}
-                  value={formData.positioning}
-                  onChange={(v) => setFormData(prev => ({ ...prev, positioning: v }))}
-                  placeholder="如：热带湿热气候防脱清凉洗发水"
-                  multiline
-                  rows={2}
-                  aiNote={aiExplain.positioning?.note}
-                  aiReason={aiExplain.positioning?.reason}
-                  aiConfidence={aiExplain.positioning?.confidence}
-                />
-
-                {/* 模块3: 卖点简介 */}
-                <ModuleField
-                  label="卖点简介"
-                  icon={FileText}
-                  value={formData.selling_point}
-                  onChange={(v) => setFormData(prev => ({ ...prev, selling_point: v }))}
-                  placeholder="产品卖点段落描述..."
-                  multiline
-                  rows={4}
-                  aiNote={aiExplain.selling_point?.note}
-                  aiReason={aiExplain.selling_point?.reason}
-                  aiConfidence={aiExplain.selling_point?.confidence}
-                />
-
-                {/* 模块4: 主要成分 */}
-                <ModuleField
-                  label="主要成分"
-                  icon={Beaker}
-                  value={formData.ingredients}
-                  onChange={(v) => setFormData(prev => ({ ...prev, ingredients: v }))}
-                  placeholder="如：迷迭香叶提取物, 薄荷油, 咖啡因..."
-                  multiline
-                  rows={2}
-                  aiNote={aiExplain.ingredients?.note}
-                  aiReason={aiExplain.ingredients?.reason}
-                  aiConfidence={aiExplain.ingredients?.confidence}
-                />
-
-                {/* 模块5: 主打功效 */}
-                <ModuleField
-                  label="主打功效"
-                  icon={Sparkles}
-                  value={formData.efficacy}
-                  onChange={(v) => setFormData(prev => ({ ...prev, efficacy: v }))}
-                  placeholder="如：防脱发与强韧发根\n即时清凉舒缓\n舒缓头皮瘙痒..."
-                  multiline
-                  rows={3}
-                  aiNote={aiExplain.efficacy?.note}
-                  aiReason={aiExplain.efficacy?.reason}
-                  aiConfidence={aiExplain.efficacy?.confidence}
-                />
-
-                {/* 模块6: 香味 */}
-                <ModuleField
-                  label="香味"
-                  icon={Palette}
-                  value={formData.scent}
-                  onChange={(v) => setFormData(prev => ({ ...prev, scent: v }))}
-                  placeholder="如：清新薄荷迷迭香草本香"
-                  aiNote={aiExplain.scent?.note}
-                  aiReason={aiExplain.scent?.reason}
-                  aiConfidence={aiExplain.scent?.confidence}
-                />
-
-                {/* 模块7: 质地颜色 */}
-                <ModuleField
-                  label="质地颜色"
-                  icon={Palette}
-                  value={formData.texture_color}
-                  onChange={(v) => setFormData(prev => ({ ...prev, texture_color: v }))}
-                  placeholder="如：淡绿色清透凝露质地"
-                  aiNote={aiExplain.texture_color?.note}
-                  aiReason={aiExplain.texture_color?.reason}
-                  aiConfidence={aiExplain.texture_color?.confidence}
-                />
-
-                {/* 模块8: 定价策略 */}
-                <ModuleField
-                  label="定价策略"
-                  icon={DollarSign}
-                  value={formData.pricing}
-                  onChange={(v) => setFormData(prev => ({ ...prev, pricing: v }))}
-                  placeholder="如：IDR 49,900 / 59,900"
-                  aiNote={aiExplain.pricing?.note}
-                  aiReason={aiExplain.pricing?.reason}
-                  aiConfidence={aiExplain.pricing?.confidence}
-                />
-
-                {/* 模块9: 产品标题 */}
-                <ModuleField
-                  label="产品标题"
-                  icon={Tag}
-                  value={formData.title}
-                  onChange={(v) => setFormData(prev => ({ ...prev, title: v }))}
-                  placeholder="电商平台展示标题..."
-                  multiline
-                  rows={2}
-                  maxLength={255}
-                  aiNote={aiExplain.title?.note}
-                  aiReason={aiExplain.title?.reason}
-                  aiConfidence={aiExplain.title?.confidence}
-                />
-
-                {/* 搜索关键词 */}
-                <ModuleField
-                  label="搜索关键词"
-                  icon={Tag}
-                  value={formData.keywords}
-                  onChange={(v) => setFormData(prev => ({ ...prev, keywords: v }))}
-                  placeholder="用逗号分隔关键词..."
-                  multiline
-                  rows={2}
-                />
-
-                {/* 保存草稿 */}
-                <div className="mt-6 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-100">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="text-sm text-zinc-600">
-                      💡 保存后草稿会进入「AI 草稿」Tab，管理员审核通过后将自动创建正式产品
+                {/* 5. 主打功效 - 跨两列 */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <ModuleCard
+                    moduleId="mainBenefits"
+                    number="5"
+                    title="主打功效"
+                    confidence={generatedData.mainBenefits?.confidence || 87}
+                    aiNote={generatedData.mainBenefits?.aiNote || '包装设计风格'}
+                    reason={generatedData.mainBenefits?.reason || '基于市场热搜词'}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                      {generatedData.mainBenefits?.items?.map((item, idx) => (
+                        <div key={idx} style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#0f172a',
+                          border: '1px solid #2d2d44'
+                        }}>
+                          <div style={{ fontSize: '13px', color: '#f1f5f9', marginBottom: '4px' }}>{item.en}</div>
+                          <div style={{ fontSize: '12px', color: '#94a3b8' }}>{item.id}</div>
+                          <div style={{ fontSize: '12px', color: '#64748b' }}>{item.zh}</div>
+                        </div>
+                      ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleSaveDraft}
-                      disabled={savingDraft}
-                      className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50"
-                    >
-                      {savingDraft ? (
-                        <>
-                          <Loader className="h-4 w-4 animate-spin" />
-                          保存中...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4" />
-                          保存草稿
-                        </>
+                  </ModuleCard>
+                </div>
+
+                {/* 6. 香味 */}
+                <ModuleCard
+                  moduleId="scent"
+                  number="6"
+                  title="香味"
+                  confidence={generatedData.scent?.confidence || 85}
+                  aiNote={generatedData.scent?.aiNote || '基于市场偏好'}
+                  reason={generatedData.scent?.reason || '热带市场香味趋势'}
+                >
+                  <ValueBox
+                    value={generatedData.scent?.value}
+                    valueZh={generatedData.scent?.valueZh}
+                  />
+                </ModuleCard>
+
+                {/* 7. 料体颜色 */}
+                <ModuleCard
+                  moduleId="bodyColor"
+                  number="7"
+                  title="料体颜色"
+                  confidence={generatedData.bodyColor?.confidence || 83}
+                  aiNote={generatedData.bodyColor?.aiNote || '自然感颜色'}
+                  reason={generatedData.bodyColor?.reason || '基于品类惯例'}
+                >
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#0f172a',
+                      border: '2px solid #6366f1'
+                    }}>
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>主推</span>
+                      <div style={{ fontSize: '13px', color: '#f1f5f9', marginTop: '8px' }}>{generatedData.bodyColor?.primary?.en}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>{generatedData.bodyColor?.primary?.zh}</div>
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #2d2d44'
+                    }}>
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#334155', color: '#94a3b8' }}>备选</span>
+                      <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '8px' }}>{generatedData.bodyColor?.alternative?.en}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>{generatedData.bodyColor?.alternative?.zh}</div>
+                    </div>
+                  </div>
+                </ModuleCard>
+
+                {/* 8. 定价 */}
+                <ModuleCard
+                  moduleId="pricing"
+                  number="8"
+                  title="定价策略"
+                  confidence={generatedData.pricingStrategy?.confidence || 90}
+                  aiNote={generatedData.pricingStrategy?.aiNote || '中高端定位'}
+                  reason={generatedData.pricingStrategy?.reason || '基于竞品价格'}
+                >
+                  <ValueBox 
+                    value={`${generatedData.pricingStrategy?.anchor} (Flash: ${generatedData.pricingStrategy?.flash})`} 
+                    subInfo={generatedData.pricingStrategy?.competitorPrices}
+                  />
+                </ModuleCard>
+
+                {/* 9. 产品标题 - 跨两列 */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <ModuleCard
+                    moduleId="productTitles"
+                    number="9"
+                    title="产品标题（255字符）"
+                    confidence={generatedData.productTitles?.confidence || 92}
+                    aiNote={generatedData.productTitles?.aiNote || 'SEO优化标题'}
+                    reason={generatedData.productTitles?.reason || '前40字符核心关键词'}
+                  >
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                      {generatedData.productTitles?.options?.map((opt, idx) => (
+                        <div key={idx} style={{
+                          padding: '14px',
+                          borderRadius: '8px',
+                          backgroundColor: '#0f172a',
+                          border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            {opt.isRecommended && (
+                              <span style={{
+                                fontSize: '10px',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: '#6366f1',
+                                color: 'white'
+                              }}>推荐</span>
+                            )}
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: (opt.charCount || 0) <= 255 ? '#065f46' : '#991b1b',
+                              color: (opt.charCount || 0) <= 255 ? '#6ee7b7' : '#fca5a5'
+                            }}>{opt.charCount || 0} 字符</span>
+                          </div>
+                          <div style={{ fontSize: '14px', color: '#f1f5f9', lineHeight: '1.5' }}>{opt.value}</div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>{opt.valueZh}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </ModuleCard>
+                </div>
+
+                {/* 10. 搜索关键词 - 跨两列 */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <ModuleCard
+                    moduleId="searchKeywords"
+                    number="10"
+                    title="搜索关键词"
+                    confidence={generatedData.searchKeywords?.confidence || 88}
+                    aiNote={generatedData.searchKeywords?.aiNote || '平台搜索优化'}
+                    reason={generatedData.searchKeywords?.reason || '基于热搜趋势'}
+                  >
+                    <div style={{
+                      padding: '14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #2d2d44'
+                    }}>
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '6px', fontWeight: '600' }}>🔥 主关键词</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {generatedData.searchKeywords?.primary?.map((kw, idx) => (
+                            <span key={idx} style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: '#312e81',
+                              color: '#a5b4fc',
+                              fontSize: '12px'
+                            }}>{kw}</span>
+                          ))}
+                        </div>
+                      </div>
+                      {generatedData.searchKeywords?.secondary?.length > 0 && (
+                        <div style={{ marginBottom: '10px' }}>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', fontWeight: '600' }}>📈 次关键词</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {generatedData.searchKeywords?.secondary?.map((kw, idx) => (
+                              <span key={idx} style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: '#1e293b',
+                                color: '#94a3b8',
+                                fontSize: '12px'
+                              }}>{kw}</span>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                    </button>
+                    </div>
+                  </ModuleCard>
+                </div>
+
+              </div>
+
+              {/* 数据来源说明 */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: '#1e1b4b',
+                border: '1px solid #3730a3',
+                marginTop: '16px'
+              }}>
+                <h4 style={{ fontSize: '13px', color: '#c4b5fd', margin: '0 0 12px 0' }}>📊 数据来源说明</h4>
+                <div style={{ display: 'grid', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}>
+                  <div><span style={{ color: '#a5b4fc' }}>概念成分依据：</span>{generatedData.dataSourceNote?.conceptBasis}</div>
+                  <div><span style={{ color: '#a5b4fc' }}>关键词依据：</span>{generatedData.dataSourceNote?.keywordBasis}</div>
+                  <div style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    backgroundColor: '#312e81',
+                    marginTop: '4px'
+                  }}>
+                    ⚠️ {generatedData.dataSourceNote?.verificationTip}
                   </div>
                 </div>
               </div>
@@ -1321,6 +1909,29 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           )}
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        input:focus, select:focus {
+          outline: none;
+          border-color: #6366f1 !important;
+        }
+        ::-webkit-scrollbar {
+          width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #1a1a2e;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #334155;
+          border-radius: 3px;
+        }
+      `}</style>
     </div>
   );
-}
+};
+
+export default ProductFormAI;
