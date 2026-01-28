@@ -1,4 +1,4 @@
-// File: src/DraftReviewModal.jsx
+// File: src/DraftReviewModal.jsx*
 // 🔄 更新版本 - 适配三语产品名称字段
 // 修改内容：
 // 1. 新增 name_zh, name_en, name_id 字段支持
