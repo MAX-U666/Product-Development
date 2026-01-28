@@ -604,14 +604,20 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
     setGenerateError("");
 
     try {
-      // 收集竞品数据
+      // 收集竞品数据 - 转换为后端期望的格式
       const competitorsData = competitors
         .filter(c => c.success && c.data)
-        .map(c => ({
-          mode: c.mode,
-          url: c.url || null,
-          data: c.data
-        }));
+        .map(c => {
+          const d = c.data || {};
+          const listing = d.listing || d;
+          return {
+            name: listing.title || listing.name || d.name || "",
+            price: listing.price || d.price || "",
+            ingredients: listing.ingredients || d.ingredients || "",
+            benefits: listing.benefits || d.benefits || [],
+            source_url: c.url || listing.url || ""
+          };
+        });
 
       const payload = {
         // 品牌信息
@@ -626,19 +632,26 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
         category,
         market,
         platform,
-        // 竞品数据
+        // 竞品数据（已转换格式）
         competitors: competitorsData,
         ai_config: AI_CONFIG
       };
+
+      console.log("📤 发送生成请求:", payload);
 
       const result = await withTimeout(
         generateProductPlan(payload),
         120000
       );
 
-      // 解析结果并填充表单
-      if (result) {
-        const plan = safeJson(result.plan) || result.plan || result;
+      console.log("📥 收到生成结果:", result);
+
+      // 解析结果并填充表单 - 修复：正确读取 result.data.plan
+      if (result && result.success !== false) {
+        const planData = result.data || result;
+        const plan = safeJson(planData.plan) || planData.plan || planData;
+        
+        const explanations = safeJson(planData.explanations) || planData.explanations || {};
         
         setFormData(prev => ({
           ...prev,
@@ -662,59 +675,61 @@ export default function ProductFormAI({ onClose, onSuccess, currentUser }) {
           pricing: plan.pricing?.recommended || plan.pricing?.value || plan.pricing || "",
           // 模块9: 产品标题
           title: plan.productTitle?.value || plan.title || "",
-          keywords: plan.keywords?.value || plan.keywords || "",
+          keywords: Array.isArray(plan.keywords) ? plan.keywords.join(", ") : (plan.keywords?.value || plan.keywords || ""),
           // 隐藏字段
-          volume: plan.volume || "",
-          packaging_requirements: plan.packaging?.requirements || plan.packaging_requirements || ""
+          volume: plan.volume || manualVolume || "",
+          packaging_requirements: plan.packaging?.requirements || plan.packaging_requirements || plan.packaging || ""
         }));
 
-        // 设置AI说明
+        // 设置AI说明 - 优先用 explanations，其次用 plan 里的字段
         setAiExplain({
           productName: {
-            note: plan.productName?.aiNote || plan.productName?.reason,
-            confidence: plan.productName?.confidence
+            note: plan.productName?.aiNote || explanations.productName?.note,
+            confidence: plan.productName?.confidence || explanations.productName?.confidence
           },
           positioning: {
-            note: plan.positioning?.aiNote,
-            reason: plan.positioning?.reason,
-            confidence: plan.positioning?.confidence
+            note: plan.positioning?.aiNote || explanations.positioning?.note,
+            reason: plan.positioning?.reason || explanations.positioning?.reason,
+            confidence: plan.positioning?.confidence || explanations.positioning?.confidence
           },
           selling_point: {
-            note: plan.productIntro?.aiNote,
-            reason: plan.productIntro?.reason,
-            confidence: plan.productIntro?.confidence
+            note: plan.productIntro?.aiNote || explanations.sellingPoint?.note || explanations.selling_point?.note,
+            reason: plan.productIntro?.reason || explanations.sellingPoint?.reason,
+            confidence: plan.productIntro?.confidence || explanations.sellingPoint?.confidence
           },
           ingredients: {
-            note: plan.ingredientCombos?.aiNote,
-            reason: plan.ingredientCombos?.reason,
-            confidence: plan.ingredientCombos?.confidence
+            note: plan.ingredientCombos?.aiNote || explanations.ingredients?.note,
+            reason: plan.ingredientCombos?.reason || explanations.ingredients?.reason,
+            confidence: plan.ingredientCombos?.confidence || explanations.ingredients?.confidence
           },
           efficacy: {
-            note: plan.mainBenefits?.aiNote,
-            reason: plan.mainBenefits?.reason,
-            confidence: plan.mainBenefits?.confidence
+            note: plan.mainBenefits?.aiNote || explanations.efficacy?.note,
+            reason: plan.mainBenefits?.reason || explanations.efficacy?.reason,
+            confidence: plan.mainBenefits?.confidence || explanations.efficacy?.confidence
           },
           scent: {
-            note: plan.scent?.aiNote,
-            reason: plan.scent?.reason,
-            confidence: plan.scent?.confidence
+            note: plan.scent?.aiNote || explanations.scent?.note,
+            reason: plan.scent?.reason || explanations.scent?.reason,
+            confidence: plan.scent?.confidence || explanations.scent?.confidence
           },
           texture_color: {
-            note: plan.texture?.aiNote,
-            reason: plan.texture?.reason,
-            confidence: plan.texture?.confidence
+            note: plan.texture?.aiNote || explanations.color?.note || explanations.texture_color?.note,
+            reason: plan.texture?.reason || explanations.color?.reason,
+            confidence: plan.texture?.confidence || explanations.color?.confidence
           },
           pricing: {
-            note: plan.pricing?.aiNote,
-            reason: plan.pricing?.reason,
-            confidence: plan.pricing?.confidence
+            note: plan.pricing?.aiNote || explanations.pricing?.note,
+            reason: plan.pricing?.reason || explanations.pricing?.reason,
+            confidence: plan.pricing?.confidence || explanations.pricing?.confidence
           },
           title: {
-            note: plan.productTitle?.aiNote,
-            reason: plan.productTitle?.reason,
-            confidence: plan.productTitle?.confidence
+            note: plan.productTitle?.aiNote || explanations.title?.note,
+            reason: plan.productTitle?.reason || explanations.title?.reason,
+            confidence: plan.productTitle?.confidence || explanations.title?.confidence
           }
         });
+      } else {
+        setGenerateError("AI 返回数据为空");
       }
     } catch (err) {
       setGenerateError(err.message || "生成失败，请重试");
