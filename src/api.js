@@ -3,6 +3,23 @@
 const SB_URL = 'https://ppzwadqyqjadfdklkvtw.supabase.co'
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwendhZHF5cWphZGZka2xrdnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4ODgzOTQsImV4cCI6MjA4NDQ2NDM5NH0.xRfWovMVy55OqFFeS3hi1bn7X3CMji-clm8Hzo0yBok'
 const STORAGE_BUCKET = 'bottle-library'
+// ================= 获取单个瓶型 =================
+export async function fetchBottleById(bottleId) {
+  if (!bottleId) return null;
+  
+  const url = `${SB_URL}/rest/v1/bottles?id=eq.${bottleId}&limit=1`;
+  const res = await fetch(url, { headers: baseHeaders() });
+  
+  if (!res.ok) {
+    console.error('fetchBottleById failed:', await res.text());
+    return null;
+  }
+  
+  const rows = await res.json();
+  return rows?.[0] || null;
+}
+
+
 
 // ================= SKU 自动编码 =================
 
