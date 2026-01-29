@@ -512,6 +512,39 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         .filter(c => c.success && c.data)
         .map(c => ({ ...c.data, url: c.url }));
 
+      // 提取三语名称
+      const recommendedName = generatedData.productName?.options?.find(o => o.isRecommended) 
+        || generatedData.productName?.options?.[0];
+
+      // 提取定价（修复 undefined 问题）
+      const pricingValue = generatedData.pricingStrategy?.anchor 
+        || generatedData.pricing?.value 
+        || formData.pricing 
+        || '';
+
+      // 提取标题
+      const recommendedTitle = generatedData.productTitles?.options?.find(o => o.isRecommended)
+        || generatedData.productTitles?.options?.[0];
+
+      // 提取关键词
+      const keywordsArray = [
+        ...(generatedData.searchKeywords?.primary || []),
+        ...(generatedData.searchKeywords?.secondary || []),
+        ...(generatedData.searchKeywords?.longtail || [])
+      ];
+
+      // 提取成分
+      const ingredientsText = generatedData.ingredientCombos?.items
+        ?.map(i => i.ingredient?.zh || i.ingredient?.en || '')
+        .filter(Boolean)
+        .join(', ') || '';
+
+      // 提取功效
+      const efficacyText = generatedData.mainBenefits?.items
+        ?.map(i => i.zh || i.en || '')
+        .filter(Boolean)
+        .join('\n') || '';
+
       const draftData = {
         develop_month: developMonth,
         category: formData.category,
@@ -525,21 +558,24 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         concept_ingredient: formData.conceptIngredient,
         
         // 三语名称
-        name_zh: generatedData.productName?.options?.[0]?.zh || '',
-        name_en: generatedData.productName?.options?.[0]?.id || '',
-        name_id: generatedData.productName?.options?.[0]?.id || '',
+        name_zh: recommendedName?.zh || '',
+        name_en: recommendedName?.id || recommendedName?.en || '',
+        name_id: recommendedName?.id || '',
         
-        // 9模块数据
+        // 9模块简化字段（向后兼容旧版审核页面）
         positioning: generatedData.positioning?.valueZh || generatedData.positioning?.value || '',
         selling_point: generatedData.productIntro?.zh || generatedData.productIntro?.en || '',
-        ingredients: generatedData.ingredientCombos?.items?.map(i => i.ingredient?.zh || i.ingredient?.en).join(', ') || '',
-        efficacy: generatedData.mainBenefits?.items?.map(i => i.zh || i.en).join('\n') || '',
+        ingredients: ingredientsText,
+        efficacy: efficacyText,
         scent: generatedData.scent?.valueZh || generatedData.scent?.value || '',
         texture_color: generatedData.bodyColor?.primary?.zh || generatedData.bodyColor?.primary?.en || '',
-        pricing: generatedData.pricingStrategy?.anchor || '',
-        title: generatedData.productTitles?.options?.[0]?.value || '',
-        keywords: generatedData.searchKeywords?.primary?.join(', ') || '',
-        volume: formData.volume || '',
+        pricing: pricingValue,
+        title: recommendedTitle?.value || '',
+        keywords: keywordsArray.join(', '),
+        volume: formData.volume || generatedData.volume || '',
+        
+        // ⭐ 完整AI生成方案（核心：存储所有详细数据）
+        ai_generated_plan: generatedData,
         
         // AI 元数据
         extract_provider: AI_CONFIG.extract_provider,
@@ -561,6 +597,12 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         created_by: currentUser?.id || 1,
         created_at: getCurrentBeijingISO()
       };
+
+      console.log('📤 保存草稿数据:', {
+        ...draftData,
+        ai_generated_plan: '(完整方案数据)',
+        competitors_data: `${competitorsData.length} 条竞品`
+      });
 
       await insertAIDraft(draftData);
       
