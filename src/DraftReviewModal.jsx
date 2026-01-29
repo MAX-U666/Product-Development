@@ -44,7 +44,7 @@ const styles = {
     position: 'fixed',
     inset: 0,
     zIndex: 50,
-    backgroundColor: '#FAF9F5',
+    backgroundColor: '#1a2332',
     color: '#e2e8f0',
     fontFamily: "'Noto Sans SC', 'SF Pro Display', -apple-system, sans-serif",
     overflow: 'hidden',
@@ -58,7 +58,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FAF9F5',
+    backgroundColor: '#1a2332',
     flexShrink: 0
   },
   // 内容区
@@ -66,7 +66,7 @@ const styles = {
     flex: 1,
     padding: '20px 28px',
     overflowY: 'auto',
-    backgroundColor: '#FAF9F5'
+    backgroundColor: '#1a2332'
   },
   // 模块卡片
   moduleCard: {
@@ -1062,7 +1062,7 @@ export default function DraftReviewModal({
         justifyContent: 'space-between',
         padding: '16px 32px',
         borderTop: '1px solid #1e1e2e',
-        backgroundColor: '#FAF9F5',
+        backgroundColor: '#1a2332',
         flexShrink: 0
       }}>
         {mode === "review" && !needsReview && (
