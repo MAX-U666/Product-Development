@@ -44,7 +44,7 @@ const styles = {
     position: 'fixed',
     inset: 0,
     zIndex: 50,
-    backgroundColor: '#1a2332',
+    backgroundColor: '#FAF9F5',
     color: '#e2e8f0',
     fontFamily: "'Noto Sans SC', 'SF Pro Display', -apple-system, sans-serif",
     overflow: 'hidden',
@@ -58,7 +58,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1a2332',
+    backgroundColor: '#FAF9F5',
     flexShrink: 0
   },
   // 内容区
@@ -66,11 +66,11 @@ const styles = {
     flex: 1,
     padding: '20px 28px',
     overflowY: 'auto',
-    backgroundColor: '#1a2332'
+    backgroundColor: '#FAF9F5'
   },
   // 模块卡片
   moduleCard: {
-    backgroundColor: '#1a2332',
+    backgroundColor: '#FAF9F5',
     borderRadius: '12px',
     padding: '20px',
     marginBottom: '16px',
@@ -142,7 +142,7 @@ const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highl
   
   return (
     <div style={{
-      backgroundColor: '#1a2332',
+      backgroundColor: '#FAF9F5',
       borderRadius: '12px',
       padding: '20px',
       marginBottom: '16px',
@@ -257,7 +257,7 @@ const ImgTile = ({ title, src }) => {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 12px',
-        backgroundColor: '#1a2332',
+        backgroundColor: '#FAF9F5',
         borderBottom: '1px solid #334155'
       }}>
         <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>{title}</span>
@@ -576,7 +576,7 @@ export default function DraftReviewModal({
           <div style={{
             padding: '16px',
             borderRadius: '12px',
-            backgroundColor: '#1a2332',
+            backgroundColor: '#FAF9F5',
             border: '1px solid #2d2d44',
             marginBottom: '20px'
           }}>
@@ -903,7 +903,7 @@ export default function DraftReviewModal({
             </>
           ) : (
             /* ========== 旧版字段兼容显示 ========== */
-            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginBottom: '16px' }}>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#FAF9F5', border: '1px solid #2d2d44', marginBottom: '16px' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '16px' }}>AI 生成内容（旧版数据）</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {draft.name_zh && (
@@ -934,7 +934,7 @@ export default function DraftReviewModal({
             <div style={{
               padding: '16px',
               borderRadius: '12px',
-              backgroundColor: isDevAssetsReview ? '#1e3a5f' : '#1a2332',
+              backgroundColor: isDevAssetsReview ? '#1e3a5f' : '#FAF9F5',
               border: isDevAssetsReview ? '1px solid #3b82f6' : '1px solid #2d2d44',
               marginTop: '16px'
             }}>
@@ -964,7 +964,7 @@ export default function DraftReviewModal({
             <div style={{
               padding: '16px',
               borderRadius: '12px',
-              backgroundColor: isPackageReview ? '#4a3728' : '#1a2332',
+              backgroundColor: isPackageReview ? '#4a3728' : '#FAF9F5',
               border: isPackageReview ? '1px solid #f59e0b' : '1px solid #2d2d44',
               marginTop: '16px'
             }}>
@@ -984,7 +984,7 @@ export default function DraftReviewModal({
 
           {/* 竞品信息 */}
           {competitors.length > 0 && (
-            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginTop: '16px' }}>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#FAF9F5', border: '1px solid #2d2d44', marginTop: '16px' }}>
               <button 
                 onClick={() => setShowCompetitors(!showCompetitors)} 
                 style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', color: '#f1f5f9' }}
@@ -1010,7 +1010,7 @@ export default function DraftReviewModal({
           )}
 
           {/* AI 元数据 */}
-          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginTop: '16px' }}>
+          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#FAF9F5', border: '1px solid #2d2d44', marginTop: '16px' }}>
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '12px' }}>AI 元数据</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
               <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
@@ -1030,7 +1030,7 @@ export default function DraftReviewModal({
 
           {/* 审核意见输入框 */}
           {(!isView || needsReview) && (
-            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginTop: '16px' }}>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#FAF9F5', border: '1px solid #2d2d44', marginTop: '16px' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '12px' }}>审核意见 {needsReview && '(退回时必填)'}</div>
               <textarea
                 style={{
@@ -1062,7 +1062,7 @@ export default function DraftReviewModal({
         justifyContent: 'space-between',
         padding: '16px 32px',
         borderTop: '1px solid #1e1e2e',
-        backgroundColor: '#1a2332',
+        backgroundColor: '#FAF9F5',
         flexShrink: 0
       }}>
         {mode === "review" && !needsReview && (
@@ -1140,7 +1140,7 @@ export default function DraftReviewModal({
 
       <style>{`
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1a2332; }
+        ::-webkit-scrollbar-track { background: #FAF9F5; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
       `}</style>
     </div>
