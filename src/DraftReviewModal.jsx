@@ -1,18 +1,9 @@
 // File: src/DraftReviewModal.jsx
-// ✅ 全面升级版本 - 2026-01-29
-// 支持显示完整9模块AI方案，与AI生成页面风格一致
+// ✅ 完全同步 AI 创建页面样式 - 2026-01-29
+// 深色主题 + 完整10模块 + 置信度 + AI说明 + 理由 + 三语言
 
 import React, { useState } from "react";
-import {
-  X,
-  CheckCircle,
-  XCircle,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  Sparkles,
-  AlertTriangle,
-} from "lucide-react";
+import { X, CheckCircle, XCircle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { createProductFromDraft, updateDraftStatus, updateData } from "./api";
 import { getCurrentBeijingISO, formatTime } from "./timeConfig";
 
@@ -46,7 +37,74 @@ function normalizeImageList(maybe) {
   return [];
 }
 
-// ==================== 子组件 ====================
+// ==================== 样式常量（与AI创建页面一致） ====================
+const styles = {
+  // 主容器
+  container: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 50,
+    backgroundColor: '#0d0d1a',
+    color: '#e2e8f0',
+    fontFamily: "'Noto Sans SC', 'SF Pro Display', -apple-system, sans-serif",
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  // Header
+  header: {
+    padding: '16px 32px',
+    borderBottom: '1px solid #1e1e2e',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0d0d1a',
+    flexShrink: 0
+  },
+  // 内容区
+  content: {
+    flex: 1,
+    padding: '20px 28px',
+    overflowY: 'auto',
+    backgroundColor: '#0d0d1a'
+  },
+  // 模块卡片
+  moduleCard: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: '12px',
+    padding: '20px',
+    marginBottom: '16px',
+    border: '1px solid #2d2d44'
+  },
+  // AI说明框
+  aiNoteBox: {
+    padding: '12px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    marginBottom: '12px',
+    fontSize: '13px',
+    lineHeight: '1.5'
+  },
+  // 理由框
+  reasonBox: {
+    marginTop: '12px',
+    padding: '12px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    fontSize: '12px',
+    color: '#94a3b8',
+    lineHeight: '1.5'
+  },
+  // 值框
+  valueBox: {
+    padding: '14px 16px',
+    borderRadius: '8px',
+    backgroundColor: '#0f172a',
+    border: '1px solid #334155'
+  }
+};
+
+// ==================== 子组件（与AI创建页面完全一致） ====================
 
 // 置信度徽章
 const ConfidenceBadge = ({ value }) => {
@@ -54,50 +112,113 @@ const ConfidenceBadge = ({ value }) => {
   const v = typeof value === 'number' ? value : parseFloat(value) || 0;
   
   const getStyle = (val) => {
-    if (val >= 90) return { bg: 'bg-emerald-100', text: 'text-emerald-700' };
-    if (val >= 80) return { bg: 'bg-green-100', text: 'text-green-700' };
-    if (val >= 70) return { bg: 'bg-amber-100', text: 'text-amber-700' };
-    return { bg: 'bg-red-100', text: 'text-red-700' };
+    if (val >= 90) return { bg: '#065f46', text: '#6ee7b7' };
+    if (val >= 80) return { bg: '#166534', text: '#86efac' };
+    if (val >= 70) return { bg: '#854d0e', text: '#fde047' };
+    return { bg: '#991b1b', text: '#fca5a5' };
   };
   const style = getStyle(v);
   
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold ${style.bg} ${style.text}`}>
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '4px 10px',
+      borderRadius: '6px',
+      backgroundColor: style.bg,
+      color: style.text,
+      fontSize: '12px',
+      fontWeight: '600'
+    }}>
       置信度 {Math.round(v)}%
-    </span>
+    </div>
   );
 };
 
-// 模块卡片
-const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highlight = false }) => (
-  <div className={`rounded-2xl border p-4 ${highlight ? 'border-indigo-300 bg-indigo-50/50' : 'border-zinc-200 bg-white'}`}>
-    <div className="flex items-start justify-between gap-3 mb-3">
-      <div className="flex items-center gap-2">
-        <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold text-white ${highlight ? 'bg-indigo-600' : 'bg-zinc-700'}`}>
-          {number}
-        </span>
-        <span className="font-semibold text-zinc-900">{title}</span>
+// 模块卡片（与AI创建页面完全一致）
+const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highlight = false }) => {
+  const borderColor = highlight ? '#6366f1' : '#2d2d44';
+  
+  return (
+    <div style={{
+      backgroundColor: '#1a1a2e',
+      borderRadius: '12px',
+      padding: '20px',
+      marginBottom: '16px',
+      border: `1px solid ${borderColor}`,
+      position: 'relative'
+    }}>
+      {/* 标题行 */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: '16px'
+      }}>
+        <h3 style={{
+          margin: 0,
+          fontSize: '15px',
+          fontWeight: '600',
+          color: '#e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <span style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '8px',
+            background: highlight 
+              ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+              : 'linear-gradient(135deg, #475569, #64748b)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '13px',
+            fontWeight: '700',
+            color: 'white'
+          }}>{number}</span>
+          {title}
+        </h3>
+        <ConfidenceBadge value={confidence} />
       </div>
-      <ConfidenceBadge value={confidence} />
-    </div>
-    
-    {aiNote && (
-      <div className="mb-3 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
-        <div className="flex items-start gap-2">
-          <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-indigo-700">{aiNote}</div>
+      
+      {/* AI说明 */}
+      {aiNote && (
+        <div style={styles.aiNoteBox}>
+          <span style={{ color: '#a5b4fc' }}>💡 AI说明：</span>
+          <span style={{ color: '#cbd5e1' }}> {aiNote}</span>
         </div>
+      )}
+
+      {/* 内容 */}
+      <div>{children}</div>
+
+      {/* 理由 */}
+      {reason && (
+        <div style={styles.reasonBox}>
+          <span style={{ color: '#f59e0b' }}>📊 理由：</span> {reason}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 值显示框
+const ValueBox = ({ value, valueZh, subInfo }) => (
+  <div style={styles.valueBox}>
+    <div style={{ fontSize: '15px', color: '#f1f5f9', fontWeight: '500', marginBottom: valueZh ? '6px' : 0 }}>
+      {value || '-'}
+    </div>
+    {valueZh && (
+      <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+        {valueZh}
       </div>
     )}
-    
-    <div className="mb-3">{children}</div>
-    
-    {reason && (
-      <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-          <div className="text-xs text-amber-700"><strong>理由：</strong>{reason}</div>
-        </div>
+    {subInfo && (
+      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #334155' }}>
+        {subInfo}
       </div>
     )}
   </div>
@@ -107,21 +228,54 @@ const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highl
 const ImgTile = ({ title, src }) => {
   if (!src) {
     return (
-      <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-400 flex items-center justify-center h-40">
+      <div style={{
+        borderRadius: '12px',
+        border: '2px dashed #334155',
+        backgroundColor: '#0f172a',
+        padding: '16px',
+        textAlign: 'center',
+        color: '#64748b',
+        fontSize: '14px',
+        height: '160px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
         暂无
       </div>
     );
   }
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-zinc-50 border-b border-zinc-200">
-        <div className="text-sm font-medium text-zinc-800">{title}</div>
-        <button onClick={() => safeOpen(src)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-          打开 <ExternalLink className="h-3 w-3" />
+    <div style={{
+      borderRadius: '12px',
+      border: '1px solid #334155',
+      backgroundColor: '#0f172a',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '8px 12px',
+        backgroundColor: '#1a1a2e',
+        borderBottom: '1px solid #334155'
+      }}>
+        <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>{title}</span>
+        <button onClick={() => safeOpen(src)} style={{
+          background: 'none',
+          border: 'none',
+          color: '#6366f1',
+          fontSize: '11px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px'
+        }}>
+          打开 <ExternalLink size={12} />
         </button>
       </div>
-      <button className="w-full" onClick={() => safeOpen(src)}>
-        <img src={src} alt={title} className="w-full h-40 object-contain bg-white" />
+      <button style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => safeOpen(src)}>
+        <img src={src} alt={title} style={{ width: '100%', height: '160px', objectFit: 'contain', backgroundColor: '#0f172a' }} />
       </button>
     </div>
   );
@@ -138,7 +292,6 @@ export default function DraftReviewModal({
 }) {
   const [reviewComment, setReviewComment] = useState("");
   const [showCompetitors, setShowCompetitors] = useState(false);
-  const [showOldFields, setShowOldFields] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (!draft) return null;
@@ -162,7 +315,7 @@ export default function DraftReviewModal({
 
   // 动态标题
   let modalTitle = "查看 AI 草稿";
-  let modalSubtitle = "完整9模块方案";
+  let modalSubtitle = "完整10模块方案";
   if (mode === "review") {
     modalTitle = "审核 AI 草稿";
     modalSubtitle = "审核后创建产品";
@@ -338,126 +491,201 @@ export default function DraftReviewModal({
     }
   };
 
-  // ==================== 渲染 ====================
+  // ==================== 渲染（与AI创建页面完全一致的样式） ====================
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm">
-      <div className="relative w-full max-w-6xl max-h-[95vh] overflow-hidden rounded-3xl bg-zinc-50 shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 bg-white px-5 py-4 flex-shrink-0">
+    <div style={styles.container}>
+      {/* Header */}
+      <header style={styles.header}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '18px'
+          }}>📋</div>
           <div>
-            <div className="text-base font-semibold text-zinc-900">{modalTitle}</div>
-            <div className="mt-1 text-xs text-zinc-500">
-              ID: {draft.id} | 创建时间: {formatTime(draft.created_at)} | {modalSubtitle}
-            </div>
+            <h1 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#f1f5f9' }}>{modalTitle}</h1>
+            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+              ID: {draft.id} | {formatTime(draft.created_at)} | {modalSubtitle}
+            </p>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-zinc-500 hover:bg-zinc-100">
-            <X className="h-5 w-5" />
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid #334155',
+              backgroundColor: 'transparent',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <X size={16} /> 关闭
           </button>
         </div>
+      </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-5 py-5">
+      {/* Content */}
+      <div style={styles.content}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+          
           {/* 审核提示条 */}
           {needsReview && (
-            <div className={`mb-5 rounded-2xl border-2 p-4 ${isDevAssetsReview ? "border-blue-300 bg-blue-50" : "border-yellow-300 bg-yellow-50"}`}>
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl text-white text-xl ${isDevAssetsReview ? "bg-blue-600" : "bg-yellow-600"}`}>
-                  {isDevAssetsReview ? "🧪" : "🎨"}
+            <div style={{
+              padding: '16px',
+              borderRadius: '12px',
+              backgroundColor: isDevAssetsReview ? '#1e3a5f' : '#4a3728',
+              border: isDevAssetsReview ? '1px solid #3b82f6' : '1px solid #f59e0b',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                backgroundColor: isDevAssetsReview ? '#3b82f6' : '#f59e0b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '20px'
+              }}>
+                {isDevAssetsReview ? '🧪' : '🎨'}
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9' }}>
+                  {isDevAssetsReview ? '待审核：开发素材（瓶型图 / 参考包装）' : '待审核：包装设计稿'}
                 </div>
-                <div>
-                  <div className={`text-sm font-semibold ${isDevAssetsReview ? "text-blue-800" : "text-yellow-800"}`}>
-                    {isDevAssetsReview ? "待审核：开发素材（瓶型图 / 参考包装）" : "待审核：包装设计稿"}
-                  </div>
-                  <div className="text-xs text-zinc-600">请检查下方图片，确认后点击底部按钮</div>
-                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>请检查下方图片，确认后点击底部按钮</div>
               </div>
             </div>
           )}
 
           {/* 基础信息 */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 mb-5">
-            <div className="text-sm font-semibold text-zinc-900 mb-3">基础信息</div>
-            <div className="grid gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">开发月份</div>
-                <div className="font-semibold text-zinc-900">{draft.develop_month}</div>
+          <div style={{
+            padding: '16px',
+            borderRadius: '12px',
+            backgroundColor: '#1a1a2e',
+            border: '1px solid #2d2d44',
+            marginBottom: '20px'
+          }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#a5b4fc', marginBottom: '12px' }}>📝 基础信息</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>开发月份</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.develop_month}</div>
               </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">类目</div>
-                <div className="font-semibold text-zinc-900">{draft.category}</div>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>类目</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.category}</div>
               </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">市场</div>
-                <div className="font-semibold text-zinc-900">{draft.market}</div>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>市场</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.market}</div>
               </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">平台</div>
-                <div className="font-semibold text-zinc-900">{draft.platform}</div>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>平台</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.platform}</div>
               </div>
             </div>
             {/* 品牌信息 */}
-            {(draft.brand_name || draft.core_selling_point) && (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {(draft.brand_name || draft.core_selling_point || draft.concept_ingredient) && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '12px' }}>
                 {draft.brand_name && (
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                    <div className="text-xs text-zinc-500">品牌</div>
-                    <div className="font-semibold text-zinc-900">{draft.brand_name}</div>
+                  <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>品牌</div>
+                    <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.brand_name}</div>
                   </div>
                 )}
                 {draft.core_selling_point && (
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                    <div className="text-xs text-zinc-500">核心卖点方向</div>
-                    <div className="font-semibold text-zinc-900">{draft.core_selling_point}</div>
+                  <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>核心卖点方向</div>
+                    <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.core_selling_point}</div>
+                  </div>
+                )}
+                {draft.concept_ingredient && (
+                  <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>主概念成分</div>
+                    <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.concept_ingredient}</div>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* ========== 完整AI方案显示 ========== */}
+          {/* ========== 完整AI方案显示（与AI创建页面一致） ========== */}
           {hasAIPlan ? (
-            <div className="space-y-5">
+            <>
               {/* 竞品分析摘要 */}
               {aiPlan.competitorAnalysis && (
-                <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm font-semibold text-indigo-900">🔍 竞品分析摘要</div>
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '12px',
+                  backgroundColor: '#1e1b4b',
+                  border: '1px solid #3730a3',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0, fontSize: '14px', color: '#c4b5fd', fontWeight: '600' }}>🔍 竞品分析摘要</h3>
                     <ConfidenceBadge value={aiPlan.competitorAnalysis.confidence} />
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl bg-white p-3 border border-indigo-100">
-                      <div className="text-xs text-indigo-600 mb-1">价格带</div>
-                      <div className="text-sm font-medium text-zinc-900">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                    <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a' }}>
+                      <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>价格带</div>
+                      <div style={{ fontSize: '13px', color: '#f1f5f9' }}>
                         {aiPlan.competitorAnalysis.priceRange?.min} - {aiPlan.competitorAnalysis.priceRange?.max}
                       </div>
-                      <div className="text-xs text-zinc-500">中位数: {aiPlan.competitorAnalysis.priceRange?.median}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>中位数: {aiPlan.competitorAnalysis.priceRange?.median}</div>
                     </div>
-                    <div className="rounded-xl bg-white p-3 border border-indigo-100">
-                      <div className="text-xs text-indigo-600 mb-1">共同成分</div>
-                      <div className="text-sm text-zinc-900">{aiPlan.competitorAnalysis.commonIngredients?.join(', ')}</div>
+                    <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a' }}>
+                      <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>共同成分</div>
+                      <div style={{ fontSize: '12px', color: '#f1f5f9' }}>{aiPlan.competitorAnalysis.commonIngredients?.join(', ')}</div>
                     </div>
-                    <div className="rounded-xl bg-white p-3 border border-indigo-100">
-                      <div className="text-xs text-amber-600 mb-1">⚡ 差异化机会</div>
-                      <div className="text-sm text-amber-700">{aiPlan.competitorAnalysis.gaps?.join('、')}</div>
+                    <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a' }}>
+                      <div style={{ fontSize: '10px', color: '#fbbf24', marginBottom: '4px' }}>⚡ 差异化机会</div>
+                      <div style={{ fontSize: '12px', color: '#fbbf24' }}>{aiPlan.competitorAnalysis.gaps?.join('、')}</div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* 9模块网格布局 */}
-              <div className="grid gap-4 lg:grid-cols-2">
+              {/* 双列布局模块 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                
                 {/* 1. 产品名称 - 跨两列 */}
                 {aiPlan.productName && (
-                  <div className="lg:col-span-2">
+                  <div style={{ gridColumn: 'span 2' }}>
                     <ModuleCard number="1" title="产品名称 ⭐" confidence={aiPlan.productName.confidence} aiNote={aiPlan.productName.aiNote} reason={aiPlan.productName.reason} highlight>
-                      <div className="space-y-2">
+                      <div style={{ display: 'grid', gap: '10px' }}>
                         {aiPlan.productName.options?.map((opt, idx) => (
-                          <div key={idx} className={`rounded-xl border p-3 ${opt.isRecommended ? 'border-indigo-400 bg-indigo-50' : 'border-zinc-200 bg-white'}`}>
-                            {opt.isRecommended && <span className="inline-block mb-2 px-2 py-0.5 rounded text-xs font-semibold bg-indigo-600 text-white">推荐</span>}
-                            {opt.formula && <span className="inline-block mb-2 ml-2 px-2 py-0.5 rounded text-xs bg-zinc-200 text-zinc-600">{opt.formula}</span>}
-                            <div className="text-base font-semibold text-zinc-900">{opt.id}</div>
-                            <div className="text-sm text-zinc-600">{opt.zh}</div>
-                            {opt.reason && <div className="text-xs text-zinc-500 mt-1">💡 {opt.reason}</div>}
+                          <div key={idx} style={{
+                            padding: '14px',
+                            borderRadius: '8px',
+                            backgroundColor: '#0f172a',
+                            border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                              {opt.isRecommended && (
+                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>推荐</span>
+                              )}
+                              {opt.formula && (
+                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#1e293b', color: '#94a3b8' }}>{opt.formula}</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '16px', color: '#f1f5f9', fontWeight: '600', marginBottom: '4px' }}>{opt.id}</div>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>{opt.zh}</div>
+                            {opt.reason && <div style={{ fontSize: '11px', color: '#64748b' }}>💡 {opt.reason}</div>}
                           </div>
                         ))}
                       </div>
@@ -468,27 +696,24 @@ export default function DraftReviewModal({
                 {/* 2. 产品定位 */}
                 {aiPlan.positioning && (
                   <ModuleCard number="2" title="产品定位" confidence={aiPlan.positioning.confidence} aiNote={aiPlan.positioning.aiNote} reason={aiPlan.positioning.reason}>
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-sm font-medium text-zinc-900">{aiPlan.positioning.value}</div>
-                      {aiPlan.positioning.valueZh && <div className="text-sm text-zinc-600 mt-1">{aiPlan.positioning.valueZh}</div>}
-                    </div>
+                    <ValueBox value={aiPlan.positioning.value} valueZh={aiPlan.positioning.valueZh} />
                   </ModuleCard>
                 )}
 
                 {/* 3. 卖点简介 */}
                 {aiPlan.productIntro && (
                   <ModuleCard number="3" title="卖点简介" confidence={aiPlan.productIntro.confidence} aiNote={aiPlan.productIntro.aiNote} reason={aiPlan.productIntro.reason}>
-                    <div className="space-y-2">
+                    <div style={{ display: 'grid', gap: '10px' }}>
                       {aiPlan.productIntro.en && (
-                        <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                          <div className="text-xs text-indigo-600 mb-1 font-semibold">🇬🇧 English</div>
-                          <div className="text-sm text-zinc-700 leading-relaxed">{aiPlan.productIntro.en}</div>
+                        <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
+                          <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇬🇧 English</div>
+                          <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>{aiPlan.productIntro.en}</p>
                         </div>
                       )}
                       {aiPlan.productIntro.zh && (
-                        <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                          <div className="text-xs text-indigo-600 mb-1 font-semibold">🇨🇳 中文</div>
-                          <div className="text-sm text-zinc-700 leading-relaxed">{aiPlan.productIntro.zh}</div>
+                        <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
+                          <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇨🇳 中文</div>
+                          <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>{aiPlan.productIntro.zh}</p>
                         </div>
                       )}
                     </div>
@@ -497,22 +722,30 @@ export default function DraftReviewModal({
 
                 {/* 4. 概念成分 - 跨两列 */}
                 {aiPlan.ingredientCombos && (
-                  <div className="lg:col-span-2">
+                  <div style={{ gridColumn: 'span 2' }}>
                     <ModuleCard number="4" title="概念成分组合" confidence={aiPlan.ingredientCombos.confidence} aiNote={aiPlan.ingredientCombos.aiNote} reason={aiPlan.ingredientCombos.reason}>
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         {aiPlan.ingredientCombos.items?.map((item, idx) => (
-                          <div key={idx} className="rounded-xl border border-zinc-200 bg-white p-3">
-                            <div className="flex justify-between items-start mb-1">
-                              <div className="text-sm font-semibold text-indigo-700">{item.ingredient?.en}</div>
-                              {item.percentage && <span className="text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-600">{item.percentage}</span>}
+                          <div key={idx} style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <div>
+                                <div style={{ fontSize: '14px', color: '#a5b4fc', fontWeight: '600' }}>{item.ingredient?.en}</div>
+                                <div style={{ fontSize: '11px', color: '#64748b' }}>{item.ingredient?.id} | {item.ingredient?.zh}</div>
+                              </div>
+                              {item.percentage && (
+                                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#312e81', color: '#a5b4fc' }}>{item.percentage}</span>
+                              )}
                             </div>
-                            <div className="text-xs text-zinc-500">{item.ingredient?.id} | {item.ingredient?.zh}</div>
                             {item.benefits && (
-                              <div className="mt-2 text-xs text-zinc-600">
-                                {item.benefits.map((b, i) => <span key={i} className="mr-2">• {b.zh || b.en}</span>)}
+                              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px' }}>
+                                {item.benefits.map((b, i) => (
+                                  <div key={i}>• {b.en} / {b.id} / {b.zh}</div>
+                                ))}
                               </div>
                             )}
-                            {item.source && <div className="text-xs text-amber-600 mt-1">📎 {item.source}</div>}
+                            {item.source && (
+                              <div style={{ fontSize: '10px', color: '#f59e0b', paddingTop: '6px', borderTop: '1px solid #2d2d44' }}>📎 {item.source}</div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -520,43 +753,43 @@ export default function DraftReviewModal({
                   </div>
                 )}
 
-                {/* 5. 主打功效 */}
+                {/* 5. 主打功效 - 跨两列 */}
                 {aiPlan.mainBenefits && (
-                  <ModuleCard number="5" title="主打功效" confidence={aiPlan.mainBenefits.confidence} aiNote={aiPlan.mainBenefits.aiNote} reason={aiPlan.mainBenefits.reason}>
-                    <div className="grid gap-2">
-                      {aiPlan.mainBenefits.items?.map((item, idx) => (
-                        <div key={idx} className="rounded-xl border border-zinc-200 bg-white p-3">
-                          <div className="text-sm font-medium text-zinc-900">{item.en}</div>
-                          <div className="text-xs text-zinc-500">{item.id} | {item.zh}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </ModuleCard>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <ModuleCard number="5" title="主打功效" confidence={aiPlan.mainBenefits.confidence} aiNote={aiPlan.mainBenefits.aiNote} reason={aiPlan.mainBenefits.reason}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                        {aiPlan.mainBenefits.items?.map((item, idx) => (
+                          <div key={idx} style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
+                            <div style={{ fontSize: '13px', color: '#f1f5f9', marginBottom: '4px' }}>{item.en}</div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8' }}>{item.id}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b' }}>{item.zh}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </ModuleCard>
+                  </div>
                 )}
 
                 {/* 6. 香味 */}
                 {aiPlan.scent && (
                   <ModuleCard number="6" title="香味" confidence={aiPlan.scent.confidence} aiNote={aiPlan.scent.aiNote} reason={aiPlan.scent.reason}>
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-sm font-medium text-zinc-900">{aiPlan.scent.value}</div>
-                      {aiPlan.scent.valueZh && <div className="text-sm text-zinc-600 mt-1">{aiPlan.scent.valueZh}</div>}
-                    </div>
+                    <ValueBox value={aiPlan.scent.value} valueZh={aiPlan.scent.valueZh} />
                   </ModuleCard>
                 )}
 
                 {/* 7. 料体颜色 */}
                 {aiPlan.bodyColor && (
                   <ModuleCard number="7" title="料体颜色" confidence={aiPlan.bodyColor.confidence} aiNote={aiPlan.bodyColor.aiNote} reason={aiPlan.bodyColor.reason}>
-                    <div className="grid gap-2 grid-cols-2">
-                      <div className="rounded-xl border-2 border-indigo-400 bg-indigo-50 p-3">
-                        <span className="text-xs px-2 py-0.5 rounded bg-indigo-600 text-white">主推</span>
-                        <div className="text-sm font-medium text-zinc-900 mt-2">{aiPlan.bodyColor.primary?.en}</div>
-                        <div className="text-xs text-zinc-500">{aiPlan.bodyColor.primary?.zh}</div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ flex: 1, padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '2px solid #6366f1' }}>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>主推</span>
+                        <div style={{ fontSize: '13px', color: '#f1f5f9', marginTop: '8px' }}>{aiPlan.bodyColor.primary?.en}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{aiPlan.bodyColor.primary?.zh}</div>
                       </div>
-                      <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                        <span className="text-xs px-2 py-0.5 rounded bg-zinc-200 text-zinc-600">备选</span>
-                        <div className="text-sm text-zinc-700 mt-2">{aiPlan.bodyColor.alternative?.en}</div>
-                        <div className="text-xs text-zinc-500">{aiPlan.bodyColor.alternative?.zh}</div>
+                      <div style={{ flex: 1, padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#334155', color: '#94a3b8' }}>备选</span>
+                        <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '8px' }}>{aiPlan.bodyColor.alternative?.en}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>{aiPlan.bodyColor.alternative?.zh}</div>
                       </div>
                     </div>
                   </ModuleCard>
@@ -565,27 +798,39 @@ export default function DraftReviewModal({
                 {/* 8. 定价策略 */}
                 {aiPlan.pricingStrategy && (
                   <ModuleCard number="8" title="定价策略" confidence={aiPlan.pricingStrategy.confidence} aiNote={aiPlan.pricingStrategy.aiNote} reason={aiPlan.pricingStrategy.reason}>
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="text-lg font-bold text-emerald-600">{aiPlan.pricingStrategy.anchor}</div>
-                      {aiPlan.pricingStrategy.flash && <div className="text-sm text-zinc-600">Flash: {aiPlan.pricingStrategy.flash}</div>}
-                      {aiPlan.pricingStrategy.competitorPrices && <div className="text-xs text-zinc-500 mt-2 pt-2 border-t border-zinc-200">{aiPlan.pricingStrategy.competitorPrices}</div>}
-                    </div>
+                    <ValueBox 
+                      value={`${aiPlan.pricingStrategy.anchor || '-'}${aiPlan.pricingStrategy.flash ? ` (Flash: ${aiPlan.pricingStrategy.flash})` : ''}`}
+                      subInfo={aiPlan.pricingStrategy.competitorPrices}
+                    />
                   </ModuleCard>
                 )}
 
                 {/* 9. 产品标题 - 跨两列 */}
                 {aiPlan.productTitles && (
-                  <div className="lg:col-span-2">
+                  <div style={{ gridColumn: 'span 2' }}>
                     <ModuleCard number="9" title="产品标题（255字符）" confidence={aiPlan.productTitles.confidence} aiNote={aiPlan.productTitles.aiNote} reason={aiPlan.productTitles.reason}>
-                      <div className="space-y-2">
+                      <div style={{ display: 'grid', gap: '10px' }}>
                         {aiPlan.productTitles.options?.map((opt, idx) => (
-                          <div key={idx} className={`rounded-xl border p-3 ${opt.isRecommended ? 'border-indigo-400 bg-indigo-50' : 'border-zinc-200 bg-white'}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              {opt.isRecommended && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-indigo-600 text-white">推荐</span>}
-                              <span className={`px-2 py-0.5 rounded text-xs ${(opt.charCount || 0) <= 255 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{opt.charCount || 0} 字符</span>
+                          <div key={idx} style={{
+                            padding: '14px',
+                            borderRadius: '8px',
+                            backgroundColor: '#0f172a',
+                            border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                              {opt.isRecommended && (
+                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>推荐</span>
+                              )}
+                              <span style={{
+                                fontSize: '10px',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: (opt.charCount || 0) <= 255 ? '#065f46' : '#991b1b',
+                                color: (opt.charCount || 0) <= 255 ? '#6ee7b7' : '#fca5a5'
+                              }}>{opt.charCount || 0} 字符</span>
                             </div>
-                            <div className="text-sm text-zinc-900 leading-relaxed">{opt.value}</div>
-                            {opt.valueZh && <div className="text-xs text-zinc-500 mt-1">{opt.valueZh}</div>}
+                            <div style={{ fontSize: '14px', color: '#f1f5f9', lineHeight: '1.5' }}>{opt.value}</div>
+                            {opt.valueZh && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>{opt.valueZh}</div>}
                           </div>
                         ))}
                       </div>
@@ -595,35 +840,35 @@ export default function DraftReviewModal({
 
                 {/* 10. 搜索关键词 - 跨两列 */}
                 {aiPlan.searchKeywords && (
-                  <div className="lg:col-span-2">
+                  <div style={{ gridColumn: 'span 2' }}>
                     <ModuleCard number="10" title="搜索关键词" confidence={aiPlan.searchKeywords.confidence} aiNote={aiPlan.searchKeywords.aiNote} reason={aiPlan.searchKeywords.reason}>
-                      <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                      <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
                         {aiPlan.searchKeywords.primary?.length > 0 && (
-                          <div className="mb-3">
-                            <div className="text-xs text-indigo-600 font-semibold mb-2">🔥 主关键词</div>
-                            <div className="flex flex-wrap gap-2">
-                              {aiPlan.searchKeywords.primary.map((kw, i) => (
-                                <span key={i} className="px-3 py-1 rounded-lg bg-indigo-100 text-indigo-700 text-sm">{kw}</span>
+                          <div style={{ marginBottom: '10px' }}>
+                            <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '6px', fontWeight: '600' }}>🔥 主关键词</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {aiPlan.searchKeywords.primary.map((kw, idx) => (
+                                <span key={idx} style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: '#312e81', color: '#a5b4fc', fontSize: '12px' }}>{kw}</span>
                               ))}
                             </div>
                           </div>
                         )}
                         {aiPlan.searchKeywords.secondary?.length > 0 && (
-                          <div className="mb-3">
-                            <div className="text-xs text-zinc-600 font-semibold mb-2">📈 次关键词</div>
-                            <div className="flex flex-wrap gap-2">
-                              {aiPlan.searchKeywords.secondary.map((kw, i) => (
-                                <span key={i} className="px-3 py-1 rounded-lg bg-zinc-100 text-zinc-700 text-sm">{kw}</span>
+                          <div style={{ marginBottom: '10px' }}>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px', fontWeight: '600' }}>📈 次关键词</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {aiPlan.searchKeywords.secondary.map((kw, idx) => (
+                                <span key={idx} style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: '#1e293b', color: '#94a3b8', fontSize: '12px' }}>{kw}</span>
                               ))}
                             </div>
                           </div>
                         )}
                         {aiPlan.searchKeywords.longtail?.length > 0 && (
                           <div>
-                            <div className="text-xs text-zinc-500 font-semibold mb-2">🎯 长尾词</div>
-                            <div className="flex flex-wrap gap-2">
-                              {aiPlan.searchKeywords.longtail.map((kw, i) => (
-                                <span key={i} className="px-3 py-1 rounded-lg border border-zinc-200 text-zinc-600 text-sm">{kw}</span>
+                            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', fontWeight: '600' }}>🎯 长尾词</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {aiPlan.searchKeywords.longtail.map((kw, idx) => (
+                                <span key={idx} style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#64748b', fontSize: '12px' }}>{kw}</span>
                               ))}
                             </div>
                           </div>
@@ -636,64 +881,76 @@ export default function DraftReviewModal({
 
               {/* 数据来源说明 */}
               {aiPlan.dataSourceNote && (
-                <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-                  <div className="text-sm font-semibold text-indigo-900 mb-2">📊 数据来源说明</div>
-                  <div className="grid gap-2 text-sm text-zinc-700">
-                    {aiPlan.dataSourceNote.conceptBasis && <div><span className="text-indigo-600">概念成分依据：</span>{aiPlan.dataSourceNote.conceptBasis}</div>}
-                    {aiPlan.dataSourceNote.keywordBasis && <div><span className="text-indigo-600">关键词依据：</span>{aiPlan.dataSourceNote.keywordBasis}</div>}
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '12px',
+                  backgroundColor: '#1e1b4b',
+                  border: '1px solid #3730a3',
+                  marginTop: '16px'
+                }}>
+                  <h4 style={{ fontSize: '13px', color: '#c4b5fd', margin: '0 0 12px 0' }}>📊 数据来源说明</h4>
+                  <div style={{ display: 'grid', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}>
+                    {aiPlan.dataSourceNote.conceptBasis && <div><span style={{ color: '#a5b4fc' }}>概念成分依据：</span>{aiPlan.dataSourceNote.conceptBasis}</div>}
+                    {aiPlan.dataSourceNote.keywordBasis && <div><span style={{ color: '#a5b4fc' }}>关键词依据：</span>{aiPlan.dataSourceNote.keywordBasis}</div>}
                     {aiPlan.dataSourceNote.verificationTip && (
-                      <div className="mt-2 p-3 rounded-xl bg-indigo-100 border border-indigo-200 text-indigo-800">
+                      <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#312e81', marginTop: '4px' }}>
                         ⚠️ {aiPlan.dataSourceNote.verificationTip}
                       </div>
                     )}
                   </div>
                 </div>
               )}
-            </div>
+            </>
           ) : (
             /* ========== 旧版字段兼容显示 ========== */
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-              <div className="text-sm font-semibold text-zinc-900 mb-4">AI 生成内容</div>
-              <div className="grid gap-4 lg:grid-cols-2">
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginBottom: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '16px' }}>AI 生成内容（旧版数据）</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {draft.name_zh && (
-                  <div className="lg:col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="text-xs text-zinc-500 mb-1">产品名称（三语）</div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <div><span className="text-xs text-zinc-400">中文：</span><span className="font-medium">{draft.name_zh}</span></div>
-                      <div><span className="text-xs text-zinc-400">英文：</span><span className="font-medium">{draft.name_en}</span></div>
-                      <div><span className="text-xs text-zinc-400">印尼语：</span><span className="font-medium">{draft.name_id}</span></div>
+                  <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>产品名称（三语）</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                      <div><span style={{ fontSize: '10px', color: '#a5b4fc' }}>中文：</span><span style={{ color: '#f1f5f9' }}>{draft.name_zh}</span></div>
+                      <div><span style={{ fontSize: '10px', color: '#a5b4fc' }}>英文：</span><span style={{ color: '#f1f5f9' }}>{draft.name_en}</span></div>
+                      <div><span style={{ fontSize: '10px', color: '#a5b4fc' }}>印尼语：</span><span style={{ color: '#f1f5f9' }}>{draft.name_id}</span></div>
                     </div>
                   </div>
                 )}
-                {draft.positioning && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">产品定位</div><div className="text-sm text-zinc-900">{draft.positioning}</div></div>}
-                {draft.selling_point && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">卖点简介</div><div className="text-sm text-zinc-900">{draft.selling_point}</div></div>}
-                {draft.ingredients && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">主要成分</div><div className="text-sm text-zinc-900">{draft.ingredients}</div></div>}
-                {draft.efficacy && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">主打功效</div><div className="text-sm text-zinc-900 whitespace-pre-line">{draft.efficacy}</div></div>}
-                {draft.scent && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">香味</div><div className="text-sm text-zinc-900">{draft.scent}</div></div>}
-                {draft.texture_color && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">料体颜色</div><div className="text-sm text-zinc-900">{draft.texture_color}</div></div>}
-                {draft.pricing && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">定价</div><div className="text-sm text-zinc-900">{draft.pricing}</div></div>}
-                {draft.title && <div className="lg:col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">产品标题</div><div className="text-sm text-zinc-900">{draft.title}</div></div>}
-                {draft.keywords && <div className="lg:col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3"><div className="text-xs text-zinc-500 mb-1">搜索关键词</div><div className="text-sm text-zinc-900">{draft.keywords}</div></div>}
+                {draft.positioning && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>产品定位</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.positioning}</div></div>}
+                {draft.selling_point && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>卖点简介</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.selling_point}</div></div>}
+                {draft.ingredients && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>主要成分</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.ingredients}</div></div>}
+                {draft.efficacy && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>主打功效</div><div style={{ fontSize: '13px', color: '#f1f5f9', whiteSpace: 'pre-line' }}>{draft.efficacy}</div></div>}
+                {draft.scent && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>香味</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.scent}</div></div>}
+                {draft.texture_color && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>料体颜色</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.texture_color}</div></div>}
+                {draft.pricing && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>定价</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.pricing}</div></div>}
+                {draft.title && <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>产品标题</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.title}</div></div>}
+                {draft.keywords && <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}><div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>搜索关键词</div><div style={{ fontSize: '13px', color: '#f1f5f9' }}>{draft.keywords}</div></div>}
               </div>
             </div>
           )}
 
           {/* 开发素材 */}
           {(bottleImg || refImgs.length > 0 || isDevAssetsReview) && (
-            <div className={`mt-5 rounded-2xl border p-5 ${isDevAssetsReview ? "border-blue-300 bg-blue-50" : "border-zinc-200 bg-white"}`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-semibold text-zinc-900">{isDevAssetsReview && "🔍 "}开发素材</div>
-                {isDevAssetsReview && <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">待审核</span>}
+            <div style={{
+              padding: '16px',
+              borderRadius: '12px',
+              backgroundColor: isDevAssetsReview ? '#1e3a5f' : '#1a1a2e',
+              border: isDevAssetsReview ? '1px solid #3b82f6' : '1px solid #2d2d44',
+              marginTop: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9' }}>{isDevAssetsReview && '🔍 '}开发素材</div>
+                {isDevAssetsReview && <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#3b82f6', color: 'white', fontSize: '12px', fontWeight: '500' }}>待审核</span>}
               </div>
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
-                  <div className="text-xs text-zinc-500 mb-2">瓶型图</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>瓶型图</div>
                   <ImgTile title="瓶型图" src={bottleImg} />
                 </div>
                 <div>
-                  <div className="text-xs text-zinc-500 mb-2">参考包装图</div>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>参考包装图</div>
                   {refImgs.length === 0 ? <ImgTile title="参考包装图" src={null} /> : (
-                    <div className="grid gap-2 grid-cols-2">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                       {refImgs.map((u, idx) => <ImgTile key={idx} title={`参考图 ${idx + 1}`} src={u} />)}
                     </div>
                   )}
@@ -704,42 +961,47 @@ export default function DraftReviewModal({
 
           {/* 包装设计稿 */}
           {(packageDesignUrl || isPackageReview) && (
-            <div className={`mt-5 rounded-2xl border p-5 ${isPackageReview ? "border-yellow-300 bg-yellow-50" : "border-zinc-200 bg-white"}`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-semibold text-zinc-900">{isPackageReview && "🔍 "}包装设计稿</div>
-                {isPackageReview && <span className="rounded-full bg-yellow-600 px-3 py-1 text-xs font-semibold text-white">待审核</span>}
+            <div style={{
+              padding: '16px',
+              borderRadius: '12px',
+              backgroundColor: isPackageReview ? '#4a3728' : '#1a1a2e',
+              border: isPackageReview ? '1px solid #f59e0b' : '1px solid #2d2d44',
+              marginTop: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9' }}>{isPackageReview && '🔍 '}包装设计稿</div>
+                {isPackageReview && <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f59e0b', color: 'white', fontSize: '12px', fontWeight: '500' }}>待审核</span>}
               </div>
               {packageDesignUrl ? (
-                <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-                  <button className="w-full" onClick={() => safeOpen(packageDesignUrl)}>
-                    <img src={packageDesignUrl} alt="包装设计稿" className="w-full max-h-96 object-contain bg-white" />
-                  </button>
-                </div>
+                <button style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => safeOpen(packageDesignUrl)}>
+                  <img src={packageDesignUrl} alt="包装设计稿" style={{ width: '100%', maxHeight: '400px', objectFit: 'contain', borderRadius: '8px', backgroundColor: '#0f172a' }} />
+                </button>
               ) : (
-                <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-8 text-center text-sm text-zinc-400">设计师尚未上传</div>
+                <div style={{ padding: '40px', borderRadius: '8px', border: '2px dashed #334155', textAlign: 'center', color: '#64748b' }}>设计师尚未上传</div>
               )}
             </div>
           )}
 
           {/* 竞品信息 */}
           {competitors.length > 0 && (
-            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
-              <button onClick={() => setShowCompetitors(!showCompetitors)} className="flex w-full items-center justify-between text-sm font-semibold text-zinc-900">
-                <span>竞品信息（{competitors.length} 个）</span>
-                {showCompetitors ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginTop: '16px' }}>
+              <button 
+                onClick={() => setShowCompetitors(!showCompetitors)} 
+                style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', color: '#f1f5f9' }}
+              >
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>竞品信息（{competitors.length} 个）</span>
+                {showCompetitors ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
               {showCompetitors && (
-                <div className="mt-4 grid gap-3">
+                <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
                   {competitors.map((comp, idx) => (
-                    <div key={idx} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                      <div className="font-semibold text-zinc-900">竞品 {idx + 1}: {comp.name || comp.data?.listing?.title || "未知"}</div>
-                      <div className="mt-1 text-sm text-zinc-600">
-                        {comp.price && <span className="mr-3">💰 {comp.price}</span>}
-                        {comp.volume && <span className="mr-3">📦 {comp.volume}</span>}
+                    <div key={idx} style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: '#f1f5f9' }}>竞品 {idx + 1}: {comp.name || comp.data?.listing?.title || '未知'}</div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+                        {comp.price && <span style={{ marginRight: '12px' }}>💰 {comp.price}</span>}
+                        {comp.volume && <span>📦 {comp.volume}</span>}
                       </div>
-                      {comp.url && (
-                        <a href={comp.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">查看链接</a>
-                      )}
+                      {comp.url && <a href={comp.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#6366f1' }}>查看链接</a>}
                     </div>
                   ))}
                 </div>
@@ -748,30 +1010,41 @@ export default function DraftReviewModal({
           )}
 
           {/* AI 元数据 */}
-          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
-            <div className="text-sm font-semibold text-zinc-900 mb-3">AI 元数据</div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">提取模型</div>
-                <div className="font-semibold text-zinc-900">{draft.extract_provider || "—"}</div>
+          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginTop: '16px' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '12px' }}>AI 元数据</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>提取模型</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.extract_provider || '—'}</div>
               </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">生成模型</div>
-                <div className="font-semibold text-zinc-900">{draft.generate_provider || "—"}</div>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>生成模型</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>{draft.generate_provider || '—'}</div>
               </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="text-xs text-zinc-500">预估成本</div>
-                <div className="font-semibold text-zinc-900">${(draft.estimated_cost || 0).toFixed(4)}</div>
+              <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
+                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>预估成本</div>
+                <div style={{ fontSize: '14px', color: '#f1f5f9', fontWeight: '500' }}>${(draft.estimated_cost || 0).toFixed(4)}</div>
               </div>
             </div>
           </div>
 
           {/* 审核意见输入框 */}
           {(!isView || needsReview) && (
-            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5">
-              <div className="text-sm font-semibold text-zinc-900">审核意见 {needsReview && "(退回时必填)"}</div>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginTop: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '12px' }}>审核意见 {needsReview && '(退回时必填)'}</div>
               <textarea
-                className="mt-3 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-indigo-500 focus:ring-2"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  backgroundColor: '#0f172a',
+                  color: '#f1f5f9',
+                  fontSize: '14px',
+                  resize: 'vertical',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
                 rows={3}
                 placeholder="请填写审核意见..."
                 value={reviewComment}
@@ -780,48 +1053,96 @@ export default function DraftReviewModal({
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-200 bg-white px-5 py-4 flex-shrink-0">
-          {mode === "review" && !needsReview && (
-            <>
-              <button onClick={handleReject} disabled={submitting} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
-                <XCircle className="h-4 w-4" /> 拒绝
-              </button>
-              <button onClick={handleApprove} disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-                <CheckCircle className="h-4 w-4" /> {submitting ? "处理中..." : "✅ 通过并创建产品"}
-              </button>
-            </>
-          )}
-          {isDevAssetsReview && (
-            <>
-              <button onClick={handleDevAssetsReject} disabled={submitting || !reviewComment.trim()} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
-                <XCircle className="h-4 w-4" /> 退回开发补充
-              </button>
-              <button onClick={handleDevAssetsApprove} disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                <CheckCircle className="h-4 w-4" /> {submitting ? "处理中..." : "✅ 通过复审"}
-              </button>
-            </>
-          )}
-          {isPackageReview && (
-            <>
-              <button onClick={handlePackageReject} disabled={submitting || !reviewComment.trim()} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
-                <XCircle className="h-4 w-4" /> 退回设计修改
-              </button>
-              <button onClick={handlePackageApprove} disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-yellow-600 px-5 py-2 text-sm font-semibold text-white hover:bg-yellow-700 disabled:opacity-50">
-                <CheckCircle className="h-4 w-4" /> {submitting ? "处理中..." : "✅ 通过审核"}
-              </button>
-            </>
-          )}
-          {isView && !needsReview && (
-            <div className="flex w-full justify-end">
-              <button onClick={onClose} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
-                关闭
-              </button>
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Footer */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px 32px',
+        borderTop: '1px solid #1e1e2e',
+        backgroundColor: '#0d0d1a',
+        flexShrink: 0
+      }}>
+        {mode === "review" && !needsReview && (
+          <>
+            <button
+              onClick={handleReject}
+              disabled={submitting}
+              style={{
+                padding: '10px 20px',
+                borderRadius: '8px',
+                border: '1px solid #ef4444',
+                backgroundColor: 'transparent',
+                color: '#ef4444',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                opacity: submitting ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <XCircle size={16} /> 拒绝
+            </button>
+            <button
+              onClick={handleApprove}
+              disabled={submitting}
+              style={{
+                padding: '10px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #059669, #10b981)',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                opacity: submitting ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <CheckCircle size={16} /> {submitting ? '处理中...' : '✅ 通过并创建产品'}
+            </button>
+          </>
+        )}
+        {isDevAssetsReview && (
+          <>
+            <button onClick={handleDevAssetsReject} disabled={submitting || !reviewComment.trim()} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontSize: '14px', fontWeight: '600', cursor: (submitting || !reviewComment.trim()) ? 'not-allowed' : 'pointer', opacity: (submitting || !reviewComment.trim()) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <XCircle size={16} /> 退回开发补充
+            </button>
+            <button onClick={handleDevAssetsApprove} disabled={submitting} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #2563eb, #3b82f6)', color: 'white', fontSize: '14px', fontWeight: '600', cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={16} /> {submitting ? '处理中...' : '✅ 通过复审'}
+            </button>
+          </>
+        )}
+        {isPackageReview && (
+          <>
+            <button onClick={handlePackageReject} disabled={submitting || !reviewComment.trim()} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontSize: '14px', fontWeight: '600', cursor: (submitting || !reviewComment.trim()) ? 'not-allowed' : 'pointer', opacity: (submitting || !reviewComment.trim()) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <XCircle size={16} /> 退回设计修改
+            </button>
+            <button onClick={handlePackageApprove} disabled={submitting} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #d97706, #f59e0b)', color: 'white', fontSize: '14px', fontWeight: '600', cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={16} /> {submitting ? '处理中...' : '✅ 通过审核'}
+            </button>
+          </>
+        )}
+        {isView && !needsReview && (
+          <div style={{ display: 'flex', width: '100%', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: 'transparent', color: '#94a3b8', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>
+              关闭
+            </button>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+      `}</style>
     </div>
   );
 }
