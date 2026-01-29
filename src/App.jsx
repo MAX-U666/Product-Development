@@ -1,9 +1,9 @@
 // File: src/App.jsx
-// ✅ 在你原版基础上只新增：
+// ✅ 2026-01-29 更新：添加 SKU 列显示
 // - 👁 快速预览 AI草稿 + 开发瓶型/参考图（不影响原审核/接单功能）
 // - 引入 DraftReviewModal + fetchAIDraftById
 // - 新增 quickPreview 的 3 个 state + openQuickPreview 方法 + 底部 Modal 渲染
-// 其余保持你原逻辑不变
+// - ✅ 新增 SKU 列
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles, ChevronDown } from 'lucide-react'
@@ -154,7 +154,7 @@ export default function App() {
 
   // ✅ 新增：点👁 快速预览（优先弹 AI 草稿 + 开发素材）
   async function openQuickPreview(product) {
-    // ✅ 二次审核（开发素材复审）时：直接打开【产品详情】让管理员点“通过/驳回”
+    // ✅ 二次审核（开发素材复审）时：直接打开【产品详情】让管理员点"通过/驳回"
     if (
       product?.stage === 1 &&
       (product?.dev_assets_status === "待复审" || product?.status === "待管理员复审")
@@ -404,13 +404,15 @@ export default function App() {
                 <table className="w-full">
                   <thead className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">产品名称</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">月份</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">阶段</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">状态</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">负责人</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">出单</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">操作</th>
+                      {/* ✅ 新增 SKU 列 */}
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">SKU</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">产品名称</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">月份</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">阶段</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">状态</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">负责人</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">出单</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase">操作</th>
                     </tr>
                   </thead>
 
@@ -432,7 +434,18 @@ export default function App() {
 
                       return (
                         <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium text-gray-800">
+                          {/* ✅ SKU 列 - 橙色高亮显示 */}
+                          <td className="px-4 py-4">
+                            {product.sku ? (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-orange-100 text-orange-700 text-xs font-bold border border-orange-200">
+                                📦 {product.sku}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-medium text-gray-800">
                             <div className="flex items-center gap-2">
                               {product.category || '未命名'}
                               {product.is_ai_generated && (
@@ -443,15 +456,15 @@ export default function App() {
                             </div>
                           </td>
 
-                          <td className="px-6 py-4 text-sm text-gray-600">{product.develop_month}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{product.develop_month}</td>
 
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4">
                             <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
                               阶段{product.stage}
                             </span>
                           </td>
 
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4">
                             <span
                               className={`px-3 py-1 rounded-full text-xs ${
                                 product.status === '可做货'
@@ -467,10 +480,10 @@ export default function App() {
                             </span>
                           </td>
 
-                          <td className="px-6 py-4 text-sm text-gray-600">{currentOwner}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{product.order_count || 0}单</td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{currentOwner}</td>
+                          <td className="px-4 py-4 text-sm text-gray-600">{product.order_count || 0}单</td>
 
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4">
                             <div className="flex items-center gap-3">
                               <button
                                 onClick={() => openQuickPreview(product)} // ✅ 改这里：点👁优先弹草稿预览
