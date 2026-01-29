@@ -1,6 +1,7 @@
 // File: src/ProductDetail.jsx
-// ✅ 完整版本 - 2026-01-26
+// ✅ 完整版本 - 2026-01-29
 // 传统创建产品审核页面 - 完整展示所有创建时填写的字段
+// ✅ 新增 SKU 显示
 
 import React, { useState, useEffect } from "react";
 import {
@@ -59,11 +60,15 @@ function normalizeImageList(maybe) {
 }
 
 // ========== 子组件 ==========
-function FieldItem({ label, value, fullWidth = false }) {
+function FieldItem({ label, value, fullWidth = false, highlight = false }) {
   return (
     <div className={fullWidth ? "col-span-2" : ""}>
       <div className="text-xs text-zinc-500 mb-1">{label}</div>
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 min-h-[44px]">
+      <div className={`rounded-xl border px-4 py-3 text-sm min-h-[44px] ${
+        highlight 
+          ? "border-orange-300 bg-orange-50 text-orange-800 font-semibold" 
+          : "border-zinc-200 bg-zinc-50 text-zinc-900"
+      }`}>
         {value || <span className="text-zinc-400">-</span>}
       </div>
     </div>
@@ -361,6 +366,12 @@ export default function ProductDetail({
               <h2 className="text-lg font-bold text-zinc-900">
                 {product.product_title || product.category || "产品详情"}
               </h2>
+              {/* ✅ SKU 徽章 */}
+              {product.sku && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700 border border-orange-200">
+                  📦 {product.sku}
+                </span>
+              )}
               {reviewBadge}
             </div>
             <div className="mt-1 flex items-center gap-4 text-xs text-zinc-500">
@@ -427,12 +438,15 @@ export default function ProductDetail({
           {/* ========== 1. 基础信息 ========== */}
           <SectionCard icon={FileText} title="基础信息">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* ✅ SKU 显示在基础信息第一位 */}
+              <FieldItem label="SKU 编码" value={product.sku} highlight={!!product.sku} />
               <FieldItem label="开发月份 *" value={product.develop_month} />
               <FieldItem label="开发时间" value={product.develop_time} />
               <FieldItem label="开发品类 *" value={product.category} />
               <FieldItem label="赛道" value={product.track} />
               <FieldItem label="目标市场" value={product.target_market || product.market} />
               <FieldItem label="目标平台" value={product.target_platform || product.platform} />
+              <FieldItem label="品牌" value={product.brand_name} />
             </div>
           </SectionCard>
 
