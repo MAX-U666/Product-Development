@@ -196,10 +196,21 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           });
         }
 
-        const result = await withTimeout(
-          extractCompetitorInfo({ mode: 'image', images: imageData }, aiConfig),
-          90000
-        );
+
+
+// 清理URL，去掉追踪参数
+let cleanUrl = comp.url.trim();
+if (cleanUrl.includes('?')) {
+  cleanUrl = cleanUrl.split('?')[0];
+}
+
+const result = await withTimeout(
+  extractCompetitorInfo(cleanUrl, aiConfig),
+  90000
+);
+
+        
+
         
         console.log('📥 图片提取结果:', result);
         
