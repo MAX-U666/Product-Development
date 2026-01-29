@@ -4,8 +4,61 @@
 
 import React, { useState } from "react";
 import { X, CheckCircle, XCircle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
-import { createProductFromDraft, updateDraftStatus, updateData } from "./api";
+import { createProductFromDraft, updateDraftStatus, updateData, fetchData } from "./api";
 import { getCurrentBeijingISO, formatTime } from "./timeConfig";
+
+// ==================== SKU 生成配置 ====================
+const CATEGORY_CODE = {
+  'Shampoo': 'SHP',
+  'Conditioner': 'CDT',
+  'BodyWash': 'BDW',
+  'BodyLotion': 'BDL',
+  'HairMask': 'HRM',
+  'HairSerum': 'HRS',
+};
+
+const BRAND_CODE = {
+  'BIOAQUA': 'BQ',
+  'LAIKOU': 'LK',
+  'IMAGES': 'IM',
+  // 默认取品牌名前两个字母大写
+};
+
+// 生成品牌简写
+function getBrandCode(brandName) {
+  if (!brandName) return 'XX';
+  const upper = brandName.toUpperCase();
+  return BRAND_CODE[upper] || upper.substring(0, 2);
+}
+
+// 生成类目简写
+function getCategoryCode(category) {
+  return CATEGORY_CODE[category] || category?.substring(0, 3)?.toUpperCase() || 'XXX';
+}
+
+// 从现有产品中获取某品牌+类目的最大序号
+function getMaxSkuNumber(products, brandCode, categoryCode) {
+  const prefix = `${brandCode}-${categoryCode}-`;
+  let maxNum = 0;
+  
+  products.forEach(p => {
+    if (p.sku && p.sku.startsWith(prefix)) {
+      const numPart = p.sku.substring(prefix.length);
+      const num = parseInt(numPart, 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  
+  return maxNum;
+}
+
+// 生成新 SKU
+function generateSku(brandCode, categoryCode, nextNumber) {
+  const numStr = String(nextNumber).padStart(3, '0');
+  return `${brandCode}-${categoryCode}-${numStr}`;
+}
 
 // ==================== 工具函数 ====================
 function safeOpen(url) {
@@ -334,10 +387,32 @@ export default function DraftReviewModal({
 
     setSubmitting(true);
     try {
+      // 获取品牌和类目简写
+      const brandName = draft.brand_name || 'BIOAQUA';
+      const brandCode = getBrandCode(brandName);
+      const categoryCode = getCategoryCode(draft.category);
+      
+      // 获取现有产品，计算最大序号
+      let nextNumber = 1;
+      try {
+        const existingProducts = await fetchData('products');
+        if (Array.isArray(existingProducts)) {
+          const maxNum = getMaxSkuNumber(existingProducts, brandCode, categoryCode);
+          nextNumber = maxNum + 1;
+        }
+      } catch (err) {
+        console.warn('获取产品列表失败，使用默认序号:', err);
+      }
+      
+      // 生成 SKU
+      const sku = generateSku(brandCode, categoryCode, nextNumber);
+      console.log('📦 生成 SKU:', sku);
+
       const recommendedName = aiPlan.productName?.options?.find(o => o.isRecommended) || aiPlan.productName?.options?.[0];
       const recommendedTitle = aiPlan.productTitles?.options?.find(o => o.isRecommended) || aiPlan.productTitles?.options?.[0];
       
       const productData = {
+        sku: sku,  // ← 新增 SKU 字段
         develop_month: draft.develop_month,
         category: draft.category,
         market: draft.market,
@@ -356,6 +431,7 @@ export default function DraftReviewModal({
         name_en: recommendedName?.id || draft.name_en,
         name_id: recommendedName?.id || draft.name_id,
         ai_generated_plan: aiPlan,
+        brand_name: brandName,  // ← 保存品牌名
         stage: 1,
         status: "开发补充中",
         developer_id: draft.created_by,
@@ -370,7 +446,7 @@ export default function DraftReviewModal({
         throw new Error(createResult?.message || "创建产品失败");
       }
       await updateDraftStatus(draft.id, "approve", reviewComment, draft.created_by);
-      alert(`✅ 产品已创建成功！\n\n产品 ID: ${createResult.product_id}`);
+      alert(`✅ 产品已创建成功！\n\nSKU: ${sku}\n产品 ID: ${createResult.product_id}`);
       onSuccess?.();
       onClose?.();
     } catch (e) {
@@ -532,7 +608,7 @@ export default function DraftReviewModal({
 
       {/* Content */}
       <div style={styles.content}>
-        <div style={{ maxWidth: '90%', margin: '0 auto' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
           
           {/* 审核提示条 */}
           {needsReview && (
