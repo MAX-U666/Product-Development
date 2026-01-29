@@ -44,7 +44,7 @@ const styles = {
     position: 'fixed',
     inset: 0,
     zIndex: 50,
-    backgroundColor: '#0d0d1a',
+    backgroundColor: '#0f1419',
     color: '#e2e8f0',
     fontFamily: "'Noto Sans SC', 'SF Pro Display', -apple-system, sans-serif",
     overflow: 'hidden',
@@ -58,7 +58,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#0d0d1a',
+    backgroundColor: '#0f1419',
     flexShrink: 0
   },
   // 内容区
@@ -66,11 +66,11 @@ const styles = {
     flex: 1,
     padding: '20px 28px',
     overflowY: 'auto',
-    backgroundColor: '#0d0d1a'
+    backgroundColor: '#0f1419'
   },
   // 模块卡片
   moduleCard: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#1a2332',
     borderRadius: '12px',
     padding: '20px',
     marginBottom: '16px',
@@ -138,11 +138,11 @@ const ConfidenceBadge = ({ value }) => {
 
 // 模块卡片（与AI创建页面完全一致）
 const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highlight = false }) => {
-  const borderColor = highlight ? '#6366f1' : '#2d2d44';
+  const borderColor = highlight ? '#f97316' : '#2d2d44';
   
   return (
     <div style={{
-      backgroundColor: '#1a1a2e',
+      backgroundColor: '#1a2332',
       borderRadius: '12px',
       padding: '20px',
       marginBottom: '16px',
@@ -170,7 +170,7 @@ const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highl
             height: '28px',
             borderRadius: '8px',
             background: highlight 
-              ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+              ? 'linear-gradient(135deg, #f97316, #fb923c)'
               : 'linear-gradient(135deg, #475569, #64748b)',
             display: 'flex',
             alignItems: 'center',
@@ -187,7 +187,7 @@ const ModuleCard = ({ number, title, confidence, aiNote, reason, children, highl
       {/* AI说明 */}
       {aiNote && (
         <div style={styles.aiNoteBox}>
-          <span style={{ color: '#a5b4fc' }}>💡 AI说明：</span>
+          <span style={{ color: '#fdba74' }}>💡 AI说明：</span>
           <span style={{ color: '#cbd5e1' }}> {aiNote}</span>
         </div>
       )}
@@ -257,14 +257,14 @@ const ImgTile = ({ title, src }) => {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 12px',
-        backgroundColor: '#1a1a2e',
+        backgroundColor: '#1a2332',
         borderBottom: '1px solid #334155'
       }}>
         <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>{title}</span>
         <button onClick={() => safeOpen(src)} style={{
           background: 'none',
           border: 'none',
-          color: '#6366f1',
+          color: '#f97316',
           fontSize: '11px',
           cursor: 'pointer',
           display: 'flex',
@@ -501,7 +501,7 @@ export default function DraftReviewModal({
             width: '36px',
             height: '36px',
             borderRadius: '10px',
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            background: 'linear-gradient(135deg, #f97316, #fb923c)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -576,11 +576,11 @@ export default function DraftReviewModal({
           <div style={{
             padding: '16px',
             borderRadius: '12px',
-            backgroundColor: '#1a1a2e',
+            backgroundColor: '#1a2332',
             border: '1px solid #2d2d44',
             marginBottom: '20px'
           }}>
-            <div style={{ fontSize: '14px', fontWeight: '600', color: '#a5b4fc', marginBottom: '12px' }}>📝 基础信息</div>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#fdba74', marginBottom: '12px' }}>📝 基础信息</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
               <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>开发月份</div>
@@ -632,24 +632,24 @@ export default function DraftReviewModal({
                 <div style={{
                   padding: '16px',
                   borderRadius: '12px',
-                  backgroundColor: '#1e1b4b',
-                  border: '1px solid #3730a3',
+                  backgroundColor: '#431407',
+                  border: '1px solid #9a3412',
                   marginBottom: '20px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <h3 style={{ margin: 0, fontSize: '14px', color: '#c4b5fd', fontWeight: '600' }}>🔍 竞品分析摘要</h3>
+                    <h3 style={{ margin: 0, fontSize: '14px', color: '#fed7aa', fontWeight: '600' }}>🔍 竞品分析摘要</h3>
                     <ConfidenceBadge value={aiPlan.competitorAnalysis.confidence} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                     <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a' }}>
-                      <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>价格带</div>
+                      <div style={{ fontSize: '10px', color: '#fdba74', marginBottom: '4px' }}>价格带</div>
                       <div style={{ fontSize: '13px', color: '#f1f5f9' }}>
                         {aiPlan.competitorAnalysis.priceRange?.min} - {aiPlan.competitorAnalysis.priceRange?.max}
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748b' }}>中位数: {aiPlan.competitorAnalysis.priceRange?.median}</div>
                     </div>
                     <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a' }}>
-                      <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>共同成分</div>
+                      <div style={{ fontSize: '10px', color: '#fdba74', marginBottom: '4px' }}>共同成分</div>
                       <div style={{ fontSize: '12px', color: '#f1f5f9' }}>{aiPlan.competitorAnalysis.commonIngredients?.join(', ')}</div>
                     </div>
                     <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a' }}>
@@ -673,11 +673,11 @@ export default function DraftReviewModal({
                             padding: '14px',
                             borderRadius: '8px',
                             backgroundColor: '#0f172a',
-                            border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                            border: opt.isRecommended ? '2px solid #f97316' : '1px solid #2d2d44'
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                               {opt.isRecommended && (
-                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>推荐</span>
+                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#f97316', color: 'white' }}>推荐</span>
                               )}
                               {opt.formula && (
                                 <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#1e293b', color: '#94a3b8' }}>{opt.formula}</span>
@@ -706,13 +706,13 @@ export default function DraftReviewModal({
                     <div style={{ display: 'grid', gap: '10px' }}>
                       {aiPlan.productIntro.en && (
                         <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
-                          <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇬🇧 English</div>
+                          <div style={{ fontSize: '11px', color: '#fdba74', marginBottom: '8px', fontWeight: '600' }}>🇬🇧 English</div>
                           <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>{aiPlan.productIntro.en}</p>
                         </div>
                       )}
                       {aiPlan.productIntro.zh && (
                         <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
-                          <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇨🇳 中文</div>
+                          <div style={{ fontSize: '11px', color: '#fdba74', marginBottom: '8px', fontWeight: '600' }}>🇨🇳 中文</div>
                           <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>{aiPlan.productIntro.zh}</p>
                         </div>
                       )}
@@ -729,11 +729,11 @@ export default function DraftReviewModal({
                           <div key={idx} style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                               <div>
-                                <div style={{ fontSize: '14px', color: '#a5b4fc', fontWeight: '600' }}>{item.ingredient?.en}</div>
+                                <div style={{ fontSize: '14px', color: '#fdba74', fontWeight: '600' }}>{item.ingredient?.en}</div>
                                 <div style={{ fontSize: '11px', color: '#64748b' }}>{item.ingredient?.id} | {item.ingredient?.zh}</div>
                               </div>
                               {item.percentage && (
-                                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#312e81', color: '#a5b4fc' }}>{item.percentage}</span>
+                                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#7c2d12', color: '#fdba74' }}>{item.percentage}</span>
                               )}
                             </div>
                             {item.benefits && (
@@ -781,8 +781,8 @@ export default function DraftReviewModal({
                 {aiPlan.bodyColor && (
                   <ModuleCard number="7" title="料体颜色" confidence={aiPlan.bodyColor.confidence} aiNote={aiPlan.bodyColor.aiNote} reason={aiPlan.bodyColor.reason}>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <div style={{ flex: 1, padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '2px solid #6366f1' }}>
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>主推</span>
+                      <div style={{ flex: 1, padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '2px solid #f97316' }}>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f97316', color: 'white' }}>主推</span>
                         <div style={{ fontSize: '13px', color: '#f1f5f9', marginTop: '8px' }}>{aiPlan.bodyColor.primary?.en}</div>
                         <div style={{ fontSize: '11px', color: '#94a3b8' }}>{aiPlan.bodyColor.primary?.zh}</div>
                       </div>
@@ -815,11 +815,11 @@ export default function DraftReviewModal({
                             padding: '14px',
                             borderRadius: '8px',
                             backgroundColor: '#0f172a',
-                            border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                            border: opt.isRecommended ? '2px solid #f97316' : '1px solid #2d2d44'
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                               {opt.isRecommended && (
-                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>推荐</span>
+                                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#f97316', color: 'white' }}>推荐</span>
                               )}
                               <span style={{
                                 fontSize: '10px',
@@ -845,10 +845,10 @@ export default function DraftReviewModal({
                       <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #2d2d44' }}>
                         {aiPlan.searchKeywords.primary?.length > 0 && (
                           <div style={{ marginBottom: '10px' }}>
-                            <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '6px', fontWeight: '600' }}>🔥 主关键词</div>
+                            <div style={{ fontSize: '11px', color: '#fdba74', marginBottom: '6px', fontWeight: '600' }}>🔥 主关键词</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                               {aiPlan.searchKeywords.primary.map((kw, idx) => (
-                                <span key={idx} style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: '#312e81', color: '#a5b4fc', fontSize: '12px' }}>{kw}</span>
+                                <span key={idx} style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: '#7c2d12', color: '#fdba74', fontSize: '12px' }}>{kw}</span>
                               ))}
                             </div>
                           </div>
@@ -884,16 +884,16 @@ export default function DraftReviewModal({
                 <div style={{
                   padding: '16px',
                   borderRadius: '12px',
-                  backgroundColor: '#1e1b4b',
-                  border: '1px solid #3730a3',
+                  backgroundColor: '#431407',
+                  border: '1px solid #9a3412',
                   marginTop: '16px'
                 }}>
-                  <h4 style={{ fontSize: '13px', color: '#c4b5fd', margin: '0 0 12px 0' }}>📊 数据来源说明</h4>
+                  <h4 style={{ fontSize: '13px', color: '#fed7aa', margin: '0 0 12px 0' }}>📊 数据来源说明</h4>
                   <div style={{ display: 'grid', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}>
-                    {aiPlan.dataSourceNote.conceptBasis && <div><span style={{ color: '#a5b4fc' }}>概念成分依据：</span>{aiPlan.dataSourceNote.conceptBasis}</div>}
-                    {aiPlan.dataSourceNote.keywordBasis && <div><span style={{ color: '#a5b4fc' }}>关键词依据：</span>{aiPlan.dataSourceNote.keywordBasis}</div>}
+                    {aiPlan.dataSourceNote.conceptBasis && <div><span style={{ color: '#fdba74' }}>概念成分依据：</span>{aiPlan.dataSourceNote.conceptBasis}</div>}
+                    {aiPlan.dataSourceNote.keywordBasis && <div><span style={{ color: '#fdba74' }}>关键词依据：</span>{aiPlan.dataSourceNote.keywordBasis}</div>}
                     {aiPlan.dataSourceNote.verificationTip && (
-                      <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#312e81', marginTop: '4px' }}>
+                      <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#7c2d12', marginTop: '4px' }}>
                         ⚠️ {aiPlan.dataSourceNote.verificationTip}
                       </div>
                     )}
@@ -903,16 +903,16 @@ export default function DraftReviewModal({
             </>
           ) : (
             /* ========== 旧版字段兼容显示 ========== */
-            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginBottom: '16px' }}>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginBottom: '16px' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '16px' }}>AI 生成内容（旧版数据）</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {draft.name_zh && (
                   <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>产品名称（三语）</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                      <div><span style={{ fontSize: '10px', color: '#a5b4fc' }}>中文：</span><span style={{ color: '#f1f5f9' }}>{draft.name_zh}</span></div>
-                      <div><span style={{ fontSize: '10px', color: '#a5b4fc' }}>英文：</span><span style={{ color: '#f1f5f9' }}>{draft.name_en}</span></div>
-                      <div><span style={{ fontSize: '10px', color: '#a5b4fc' }}>印尼语：</span><span style={{ color: '#f1f5f9' }}>{draft.name_id}</span></div>
+                      <div><span style={{ fontSize: '10px', color: '#fdba74' }}>中文：</span><span style={{ color: '#f1f5f9' }}>{draft.name_zh}</span></div>
+                      <div><span style={{ fontSize: '10px', color: '#fdba74' }}>英文：</span><span style={{ color: '#f1f5f9' }}>{draft.name_en}</span></div>
+                      <div><span style={{ fontSize: '10px', color: '#fdba74' }}>印尼语：</span><span style={{ color: '#f1f5f9' }}>{draft.name_id}</span></div>
                     </div>
                   </div>
                 )}
@@ -934,7 +934,7 @@ export default function DraftReviewModal({
             <div style={{
               padding: '16px',
               borderRadius: '12px',
-              backgroundColor: isDevAssetsReview ? '#1e3a5f' : '#1a1a2e',
+              backgroundColor: isDevAssetsReview ? '#1e3a5f' : '#1a2332',
               border: isDevAssetsReview ? '1px solid #3b82f6' : '1px solid #2d2d44',
               marginTop: '16px'
             }}>
@@ -964,7 +964,7 @@ export default function DraftReviewModal({
             <div style={{
               padding: '16px',
               borderRadius: '12px',
-              backgroundColor: isPackageReview ? '#4a3728' : '#1a1a2e',
+              backgroundColor: isPackageReview ? '#4a3728' : '#1a2332',
               border: isPackageReview ? '1px solid #f59e0b' : '1px solid #2d2d44',
               marginTop: '16px'
             }}>
@@ -984,7 +984,7 @@ export default function DraftReviewModal({
 
           {/* 竞品信息 */}
           {competitors.length > 0 && (
-            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginTop: '16px' }}>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginTop: '16px' }}>
               <button 
                 onClick={() => setShowCompetitors(!showCompetitors)} 
                 style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', color: '#f1f5f9' }}
@@ -1001,7 +1001,7 @@ export default function DraftReviewModal({
                         {comp.price && <span style={{ marginRight: '12px' }}>💰 {comp.price}</span>}
                         {comp.volume && <span>📦 {comp.volume}</span>}
                       </div>
-                      {comp.url && <a href={comp.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#6366f1' }}>查看链接</a>}
+                      {comp.url && <a href={comp.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#f97316' }}>查看链接</a>}
                     </div>
                   ))}
                 </div>
@@ -1010,7 +1010,7 @@ export default function DraftReviewModal({
           )}
 
           {/* AI 元数据 */}
-          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginTop: '16px' }}>
+          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginTop: '16px' }}>
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '12px' }}>AI 元数据</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
               <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155' }}>
@@ -1030,7 +1030,7 @@ export default function DraftReviewModal({
 
           {/* 审核意见输入框 */}
           {(!isView || needsReview) && (
-            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', marginTop: '16px' }}>
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#1a2332', border: '1px solid #2d2d44', marginTop: '16px' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: '#f1f5f9', marginBottom: '12px' }}>审核意见 {needsReview && '(退回时必填)'}</div>
               <textarea
                 style={{
@@ -1062,7 +1062,7 @@ export default function DraftReviewModal({
         justifyContent: 'space-between',
         padding: '16px 32px',
         borderTop: '1px solid #1e1e2e',
-        backgroundColor: '#0d0d1a',
+        backgroundColor: '#0f1419',
         flexShrink: 0
       }}>
         {mode === "review" && !needsReview && (
@@ -1140,7 +1140,7 @@ export default function DraftReviewModal({
 
       <style>{`
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-track { background: #1a2332; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
       `}</style>
     </div>
