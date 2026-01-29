@@ -31,14 +31,22 @@ const PLATFORMS = [
   { value: 'Tokopedia', label: 'Tokopedia' },
 ];
 
-// AI 配置（固定千问）
-const AI_CONFIG = {
-  extract_provider: 'qwen',
-  generate_provider: 'qwen'
-};
+// AI 模型选项
+const AI_PROVIDERS = [
+  { value: 'qwen', label: '🔮 通义千问 Qwen', desc: '阿里云，中文优化' },
+  { value: 'deepseek', label: '🔬 DeepSeek', desc: '性价比高，推理强' },
+  { value: 'gemini', label: '✨ Gemini', desc: 'Google，多模态' },
+  { value: 'claude', label: '🧠 Claude', desc: 'Anthropic，逻辑强' },
+];
 
 // ==================== 主组件 ====================
 const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
+  // ========== AI 配置状态 ==========
+  const [aiConfig, setAiConfig] = useState({
+    extract_provider: 'qwen',
+    generate_provider: 'qwen'
+  });
+
   // ========== 表单状态 ==========
   const [formData, setFormData] = useState({
     brandName: 'BIOAQUA',
@@ -121,7 +129,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
 
       try {
         const result = await withTimeout(
-          extractCompetitorInfo(comp.url.trim(), AI_CONFIG),
+          extractCompetitorInfo(comp.url.trim(), aiConfig),
           90000
         );
         
@@ -189,7 +197,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         }
 
         const result = await withTimeout(
-          extractCompetitorInfo({ mode: 'image', images: imageData }, AI_CONFIG),
+          extractCompetitorInfo({ mode: 'image', images: imageData }, aiConfig),
           90000
         );
         
@@ -286,7 +294,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         market: formData.market,
         platform: formData.platform,
         competitors: competitorsData,
-        ai_config: AI_CONFIG
+        ai_config: aiConfig
       };
 
       console.log('📤 发送生成请求:', payload);
@@ -579,8 +587,8 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         ai_generated_plan: generatedData,
         
         // AI 元数据
-        extract_provider: AI_CONFIG.extract_provider,
-        generate_provider: AI_CONFIG.generate_provider,
+        extract_provider: aiConfig.extract_provider,
+        generate_provider: aiConfig.generate_provider,
         competitors_data: competitorsData,
         ai_explanations: {
           positioning: generatedData.positioning,
@@ -1218,6 +1226,75 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           <h2 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '16px', color: '#ea580c' }}>
             📝 输入信息
           </h2>
+
+          {/* AI 模型选择 */}
+          <div style={{
+            padding: '16px',
+            borderRadius: '10px',
+            backgroundColor: '#FFFFFF',
+            marginBottom: '12px',
+            border: '1px solid #f97316'
+          }}>
+            <div style={{ fontSize: '11px', color: '#86868b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              🤖 AI 模型
+            </div>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: '#6e6e73', display: 'block', marginBottom: '4px' }}>提取模型（竞品分析）</label>
+                <select
+                  value={aiConfig.extract_provider}
+                  onChange={(e) => setAiConfig({...aiConfig, extract_provider: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #e5e5ea',
+                    backgroundColor: '#FAFAFA',
+                    color: '#1d1d1f',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {AI_PROVIDERS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: '#6e6e73', display: 'block', marginBottom: '4px' }}>生成模型（方案生成）</label>
+                <select
+                  value={aiConfig.generate_provider}
+                  onChange={(e) => setAiConfig({...aiConfig, generate_provider: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #e5e5ea',
+                    backgroundColor: '#FAFAFA',
+                    color: '#1d1d1f',
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {AI_PROVIDERS.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ 
+                padding: '8px 10px', 
+                borderRadius: '6px', 
+                backgroundColor: '#fff7ed', 
+                fontSize: '11px', 
+                color: '#ea580c',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                💡 当前：{AI_PROVIDERS.find(p => p.value === aiConfig.generate_provider)?.desc || ''}
+              </div>
+            </div>
+          </div>
 
           {/* 品牌信息 */}
           <div style={{
