@@ -718,7 +718,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
 
     return (
       <div style={{
-        backgroundColor: '#1a1a2e',
+        backgroundColor: '#1a2332',
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '16px',
@@ -738,7 +738,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
             justifyContent: 'center',
             zIndex: 10
           }}>
-            <div style={{ color: '#a5b4fc', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ color: '#fdba74', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙️</span>
               重新生成中...
             </div>
@@ -768,7 +768,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                 ? 'linear-gradient(135deg, #059669, #10b981)'
                 : status === 'needsRevision'
                 ? 'linear-gradient(135deg, #d97706, #f59e0b)'
-                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                : 'linear-gradient(135deg, #f97316, #fb923c)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -787,8 +787,8 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                   padding: '4px 8px',
                   borderRadius: '4px',
                   border: '1px solid #334155',
-                  backgroundColor: isEditing ? '#312e81' : 'transparent',
-                  color: isEditing ? '#a5b4fc' : '#64748b',
+                  backgroundColor: isEditing ? '#7c2d12' : 'transparent',
+                  color: isEditing ? '#fdba74' : '#64748b',
                   fontSize: '11px',
                   cursor: 'pointer'
                 }}
@@ -823,13 +823,13 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           fontSize: '13px',
           lineHeight: '1.5'
         }}>
-          <span style={{ color: '#a5b4fc' }}>💡 AI说明：</span>
+          <span style={{ color: '#fdba74' }}>💡 AI说明：</span>
           <span style={{ color: '#cbd5e1' }}> {aiNote}</span>
         </div>
 
         <div style={{
           position: 'relative',
-          border: isEditing ? '2px dashed #6366f1' : 'none',
+          border: isEditing ? '2px dashed #f97316' : 'none',
           borderRadius: '8px',
           padding: isEditing ? '8px' : 0
         }}>
@@ -838,7 +838,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               position: 'absolute',
               top: '-10px',
               left: '10px',
-              backgroundColor: '#6366f1',
+              backgroundColor: '#f97316',
               color: 'white',
               fontSize: '10px',
               padding: '2px 6px',
@@ -900,7 +900,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
       <div style={{
         padding: '12px',
         borderRadius: '10px',
-        backgroundColor: success ? '#0f2a1f' : '#1a1a2e',
+        backgroundColor: success ? '#0f2a1f' : '#1a2332',
         border: success ? '1px solid #166534' : '1px solid #2d2d44',
         marginBottom: '10px'
       }}>
@@ -930,9 +930,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               flex: 1,
               padding: '8px',
               borderRadius: '6px',
-              border: mode === 'url' ? '2px solid #6366f1' : '1px solid #334155',
-              backgroundColor: mode === 'url' ? '#312e81' : 'transparent',
-              color: mode === 'url' ? '#a5b4fc' : '#64748b',
+              border: mode === 'url' ? '2px solid #f97316' : '1px solid #334155',
+              backgroundColor: mode === 'url' ? '#7c2d12' : 'transparent',
+              color: mode === 'url' ? '#fdba74' : '#64748b',
               fontSize: '12px',
               cursor: 'pointer',
               display: 'flex',
@@ -949,9 +949,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               flex: 1,
               padding: '8px',
               borderRadius: '6px',
-              border: mode === 'image' ? '2px solid #6366f1' : '1px solid #334155',
-              backgroundColor: mode === 'image' ? '#312e81' : 'transparent',
-              color: mode === 'image' ? '#a5b4fc' : '#64748b',
+              border: mode === 'image' ? '2px solid #f97316' : '1px solid #334155',
+              backgroundColor: mode === 'image' ? '#7c2d12' : 'transparent',
+              color: mode === 'image' ? '#fdba74' : '#64748b',
               fontSize: '12px',
               cursor: 'pointer',
               display: 'flex',
@@ -989,7 +989,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                 padding: '8px 12px',
                 borderRadius: '6px',
                 border: 'none',
-                backgroundColor: isExtracting ? '#334155' : (success ? '#166534' : '#6366f1'),
+                backgroundColor: isExtracting ? '#334155' : (success ? '#166534' : '#f97316'),
                 color: 'white',
                 fontSize: '11px',
                 fontWeight: '500',
@@ -1042,7 +1042,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                     padding: '8px 12px',
                     borderRadius: '6px',
                     border: 'none',
-                    backgroundColor: isExtracting ? '#334155' : '#6366f1',
+                    backgroundColor: isExtracting ? '#334155' : '#f97316',
                     color: 'white',
                     fontSize: '11px',
                     fontWeight: '500',
@@ -1085,7 +1085,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
             </div>
             {data.ingredients && (
               <div style={{ color: '#64748b', fontSize: '11px' }}>
-                <span style={{ color: '#a5b4fc' }}>成分：</span>{data.ingredients}
+                <span style={{ color: '#fdba74' }}>成分：</span>{data.ingredients}
               </div>
             )}
           </div>
@@ -1101,7 +1101,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
       position: 'fixed',
       inset: 0,
       zIndex: 50,
-      backgroundColor: '#0d0d1a',
+      backgroundColor: '#0f1419',
       color: '#e2e8f0',
       fontFamily: "'Noto Sans SC', 'SF Pro Display', -apple-system, sans-serif",
       overflow: 'hidden'
@@ -1113,7 +1113,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#0d0d1a',
+        backgroundColor: '#0f1419',
         position: 'sticky',
         top: 0,
         zIndex: 100
@@ -1123,7 +1123,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
             width: '36px',
             height: '36px',
             borderRadius: '10px',
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            background: 'linear-gradient(135deg, #f97316, #fb923c)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1143,12 +1143,12 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               gap: '12px', 
               marginRight: '12px',
               padding: '8px 16px',
-              backgroundColor: '#1a1a2e',
+              backgroundColor: '#1a2332',
               borderRadius: '8px',
               fontSize: '12px'
             }}>
               <span style={{ color: '#64748b' }}>
-                待审核: <span style={{ color: '#a5b4fc', fontWeight: '600' }}>
+                待审核: <span style={{ color: '#fdba74', fontWeight: '600' }}>
                   {9 - Object.values(moduleStatus).filter(s => s === 'approved' || s === 'needsRevision').length}
                 </span>
               </span>
@@ -1212,9 +1212,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           borderRight: '1px solid #1e1e2e',
           padding: '20px',
           overflowY: 'auto',
-          backgroundColor: '#0d0d1a'
+          backgroundColor: '#0f1419'
         }}>
-          <h2 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '16px', color: '#a5b4fc' }}>
+          <h2 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '16px', color: '#fdba74' }}>
             📝 输入信息
           </h2>
 
@@ -1222,7 +1222,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           <div style={{
             padding: '16px',
             borderRadius: '10px',
-            backgroundColor: '#1a1a2e',
+            backgroundColor: '#1a2332',
             marginBottom: '12px'
           }}>
             <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1272,7 +1272,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           <div style={{
             padding: '16px',
             borderRadius: '10px',
-            backgroundColor: '#1a1a2e',
+            backgroundColor: '#1a2332',
             marginBottom: '12px'
           }}>
             <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1368,7 +1368,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           <div style={{
             padding: '16px',
             borderRadius: '10px',
-            backgroundColor: '#1a1a2e',
+            backgroundColor: '#1a2332',
             marginBottom: '12px'
           }}>
             <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1438,13 +1438,13 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           <div style={{
             padding: '16px',
             borderRadius: '10px',
-            backgroundColor: '#1a1a2e',
+            backgroundColor: '#1a2332',
             marginBottom: '16px',
-            border: '1px solid #6366f1'
+            border: '1px solid #f97316'
           }}>
             <div style={{ 
               fontSize: '11px', 
-              color: '#a5b4fc', 
+              color: '#fdba74', 
               marginBottom: '12px', 
               fontWeight: '600', 
               textTransform: 'uppercase', 
@@ -1458,8 +1458,8 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                 fontSize: '10px',
                 padding: '2px 6px',
                 borderRadius: '4px',
-                backgroundColor: '#312e81',
-                color: '#a5b4fc'
+                backgroundColor: '#7c2d12',
+                color: '#fdba74'
               }}>至少1条 · 已提取{extractedCount}条</span>
             </div>
             
@@ -1498,7 +1498,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               border: 'none',
               background: (isGenerating || extractedCount === 0) 
                 ? '#334155' 
-                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                : 'linear-gradient(135deg, #f97316, #fb923c)',
               color: 'white',
               fontSize: '15px',
               fontWeight: '600',
@@ -1537,7 +1537,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
           flex: 1,
           padding: '20px 28px',
           overflowY: 'auto',
-          backgroundColor: '#0d0d1a'
+          backgroundColor: '#0f1419'
         }}>
           {!generatedData ? (
             <div style={{
@@ -1561,7 +1561,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               <div style={{
                 padding: '16px',
                 borderRadius: '10px',
-                backgroundColor: '#1e1b4b',
+                backgroundColor: '#431407',
                 border: '1px solid #3730a3',
                 marginBottom: '20px'
               }}>
@@ -1578,7 +1578,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                   <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a' }}>
-                    <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>价格带</div>
+                    <div style={{ fontSize: '10px', color: '#fdba74', marginBottom: '4px' }}>价格带</div>
                     <div style={{ fontSize: '13px', color: '#f1f5f9' }}>
                       {generatedData.competitorAnalysis?.priceRange?.min} - {generatedData.competitorAnalysis?.priceRange?.max}
                     </div>
@@ -1587,7 +1587,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                     </div>
                   </div>
                   <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: '#0f172a' }}>
-                    <div style={{ fontSize: '10px', color: '#a5b4fc', marginBottom: '4px' }}>共同成分</div>
+                    <div style={{ fontSize: '10px', color: '#fdba74', marginBottom: '4px' }}>共同成分</div>
                     <div style={{ fontSize: '12px', color: '#f1f5f9' }}>
                       {generatedData.competitorAnalysis?.commonIngredients?.join(', ')}
                     </div>
@@ -1620,7 +1620,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                           padding: '14px',
                           borderRadius: '8px',
                           backgroundColor: '#0f172a',
-                          border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                          border: opt.isRecommended ? '2px solid #f97316' : '1px solid #2d2d44'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                             {opt.isRecommended && (
@@ -1628,7 +1628,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                                 fontSize: '10px',
                                 padding: '2px 8px',
                                 borderRadius: '4px',
-                                backgroundColor: '#6366f1',
+                                backgroundColor: '#f97316',
                                 color: 'white'
                               }}>推荐</span>
                             )}
@@ -1682,7 +1682,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                       backgroundColor: '#0f172a',
                       border: '1px solid #2d2d44'
                     }}>
-                      <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇬🇧 English</div>
+                      <div style={{ fontSize: '11px', color: '#fdba74', marginBottom: '8px', fontWeight: '600' }}>🇬🇧 English</div>
                       <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>
                         {generatedData.productIntro?.en}
                       </p>
@@ -1693,7 +1693,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                       backgroundColor: '#0f172a',
                       border: '1px solid #2d2d44'
                     }}>
-                      <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '8px', fontWeight: '600' }}>🇨🇳 中文</div>
+                      <div style={{ fontSize: '11px', color: '#fdba74', marginBottom: '8px', fontWeight: '600' }}>🇨🇳 中文</div>
                       <p style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: '1.6', margin: 0 }}>
                         {generatedData.productIntro?.zh}
                       </p>
@@ -1721,15 +1721,15 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                             <div>
-                              <div style={{ fontSize: '14px', color: '#a5b4fc', fontWeight: '600' }}>{item.ingredient?.en}</div>
+                              <div style={{ fontSize: '14px', color: '#fdba74', fontWeight: '600' }}>{item.ingredient?.en}</div>
                               <div style={{ fontSize: '11px', color: '#64748b' }}>{item.ingredient?.id} | {item.ingredient?.zh}</div>
                             </div>
                             <span style={{
                               fontSize: '10px',
                               padding: '2px 6px',
                               borderRadius: '4px',
-                              backgroundColor: '#312e81',
-                              color: '#a5b4fc'
+                              backgroundColor: '#7c2d12',
+                              color: '#fdba74'
                             }}>{item.percentage}</span>
                           </div>
                           <div style={{ fontSize: '10px', color: '#f59e0b', paddingTop: '6px', borderTop: '1px solid #2d2d44' }}>
@@ -1798,9 +1798,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                       padding: '12px',
                       borderRadius: '8px',
                       backgroundColor: '#0f172a',
-                      border: '2px solid #6366f1'
+                      border: '2px solid #f97316'
                     }}>
-                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#6366f1', color: 'white' }}>主推</span>
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f97316', color: 'white' }}>主推</span>
                       <div style={{ fontSize: '13px', color: '#f1f5f9', marginTop: '8px' }}>{generatedData.bodyColor?.primary?.en}</div>
                       <div style={{ fontSize: '11px', color: '#94a3b8' }}>{generatedData.bodyColor?.primary?.zh}</div>
                     </div>
@@ -1850,7 +1850,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                           padding: '14px',
                           borderRadius: '8px',
                           backgroundColor: '#0f172a',
-                          border: opt.isRecommended ? '2px solid #6366f1' : '1px solid #2d2d44'
+                          border: opt.isRecommended ? '2px solid #f97316' : '1px solid #2d2d44'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                             {opt.isRecommended && (
@@ -1858,7 +1858,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                                 fontSize: '10px',
                                 padding: '2px 8px',
                                 borderRadius: '4px',
-                                backgroundColor: '#6366f1',
+                                backgroundColor: '#f97316',
                                 color: 'white'
                               }}>推荐</span>
                             )}
@@ -1895,14 +1895,14 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                       border: '1px solid #2d2d44'
                     }}>
                       <div style={{ marginBottom: '10px' }}>
-                        <div style={{ fontSize: '11px', color: '#a5b4fc', marginBottom: '6px', fontWeight: '600' }}>🔥 主关键词</div>
+                        <div style={{ fontSize: '11px', color: '#fdba74', marginBottom: '6px', fontWeight: '600' }}>🔥 主关键词</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                           {generatedData.searchKeywords?.primary?.map((kw, idx) => (
                             <span key={idx} style={{
                               padding: '4px 10px',
                               borderRadius: '6px',
-                              backgroundColor: '#312e81',
-                              color: '#a5b4fc',
+                              backgroundColor: '#7c2d12',
+                              color: '#fdba74',
                               fontSize: '12px'
                             }}>{kw}</span>
                           ))}
@@ -1934,18 +1934,18 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
               <div style={{
                 padding: '16px',
                 borderRadius: '10px',
-                backgroundColor: '#1e1b4b',
+                backgroundColor: '#431407',
                 border: '1px solid #3730a3',
                 marginTop: '16px'
               }}>
                 <h4 style={{ fontSize: '13px', color: '#c4b5fd', margin: '0 0 12px 0' }}>📊 数据来源说明</h4>
                 <div style={{ display: 'grid', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}>
-                  <div><span style={{ color: '#a5b4fc' }}>概念成分依据：</span>{generatedData.dataSourceNote?.conceptBasis}</div>
-                  <div><span style={{ color: '#a5b4fc' }}>关键词依据：</span>{generatedData.dataSourceNote?.keywordBasis}</div>
+                  <div><span style={{ color: '#fdba74' }}>概念成分依据：</span>{generatedData.dataSourceNote?.conceptBasis}</div>
+                  <div><span style={{ color: '#fdba74' }}>关键词依据：</span>{generatedData.dataSourceNote?.keywordBasis}</div>
                   <div style={{
                     padding: '10px',
                     borderRadius: '6px',
-                    backgroundColor: '#312e81',
+                    backgroundColor: '#7c2d12',
                     marginTop: '4px'
                   }}>
                     ⚠️ {generatedData.dataSourceNote?.verificationTip}
@@ -1964,13 +1964,13 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
         }
         input:focus, select:focus {
           outline: none;
-          border-color: #6366f1 !important;
+          border-color: #f97316 !important;
         }
         ::-webkit-scrollbar {
           width: 6px;
         }
         ::-webkit-scrollbar-track {
-          background: #1a1a2e;
+          background: #1a2332;
         }
         ::-webkit-scrollbar-thumb {
           background: #334155;
