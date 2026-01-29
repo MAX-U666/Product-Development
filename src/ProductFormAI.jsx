@@ -1828,7 +1828,8 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser }) => {
                   reason={generatedData.pricingStrategy?.reason || '基于竞品价格'}
                 >
                   <ValueBox 
-                    value={`${generatedData.pricingStrategy?.anchor} (Flash: ${generatedData.pricingStrategy?.flash})`} 
+                    value={generatedData.pricingStrategy?.anchor || formData.pricing || '待定'}
+                    valueZh={generatedData.pricingStrategy?.flash ? `Flash: ${generatedData.pricingStrategy.flash}` : null}
                     subInfo={generatedData.pricingStrategy?.competitorPrices}
                   />
                 </ModuleCard>
