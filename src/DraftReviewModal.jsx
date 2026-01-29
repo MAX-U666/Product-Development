@@ -532,7 +532,7 @@ export default function DraftReviewModal({
 
       {/* Content */}
       <div style={styles.content}>
-        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '90%', margin: '0 auto' }}>
           
           {/* 审核提示条 */}
           {needsReview && (
