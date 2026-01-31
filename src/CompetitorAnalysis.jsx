@@ -93,7 +93,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setCompetitors(prev => prev.map((c, i) => i === index ? { ...c, ...updates } : c));
   }
 
-  // ========== 提取竞品数据（真实API）==========
+  // ========== 提取竞品数据（真实API + 完整深度分析）==========
   async function handleExtractSingle(index) {
     const comp = competitors[index];
     if (!comp.url.trim()) {
@@ -109,32 +109,51 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
       
       console.log('📥 竞品提取结果:', result);
       
-      // 解析返回数据
-      const listing = result?.listing || result?.data || result;
+      // 解析返回数据（API 返回格式：{ success, provider, data }）
+      const data = result?.data || result?.listing || result;
       
-      // 构建提取数据
+      // ✅ 构建完整提取数据（包含深度分析）
       const extractedData = {
+        // 基础信息
         basicData: {
-          name: listing?.title || listing?.name || listing?.product_name || '',
-          brand: listing?.brand || listing?.shop_name || '',
-          price: listing?.price || listing?.sale_price || '',
-          priceOriginal: listing?.original_price || '',
-          volume: listing?.volume || listing?.size || '',
-          sales: listing?.sales || listing?.sold || '',
-          rating: listing?.rating || listing?.score || '',
-          reviewCount: listing?.review_count || listing?.reviewCount || ''
+          name: data?.name || data?.title || '',
+          brand: data?.brand || '',
+          price: data?.price || '',
+          priceOriginal: data?.original_price || '',
+          volume: data?.volume || '',
+          sales: data?.sales || '',
+          rating: data?.rating || '',
+          reviewCount: data?.review_count || ''
         },
+        
+        // 标题分析
         titleAnalysis: {
-          full: listing?.title || listing?.full_title || '',
-          charCount: (listing?.title || '').length,
-          structure: '品牌 + 产品 + 功效 + 规格',
-          keywords: listing?.title_keywords || listing?.keywords || []
+          full: data?.title || data?.name || '',
+          charCount: (data?.title || data?.name || '').length,
+          structure: data?.title_analysis || '品牌 + 产品 + 功效 + 规格',
+          keywords: data?.title_keywords || []
         },
-        sellingPoints: listing?.selling_points || listing?.benefits || listing?.highlights || [],
-        ingredients: parseIngredients(listing?.ingredients || listing?.composition || ''),
+        
+        // 核心卖点
+        sellingPoints: data?.selling_points || data?.benefits || [],
+        
+        // 主打成分
+        ingredients: parseIngredients(data?.ingredients),
+        
+        // 差评痛点（✅ 新增 - 从 API 返回）
+        painPoints: data?.pain_points || [],
+        
+        // 差异化机会（✅ 新增 - 从 API 返回）
+        opportunities: data?.opportunities || [],
+        
+        // 定位分析（✅ 新增）
+        pricePositioning: data?.price_positioning || '',
+        targetAudience: data?.target_audience || '',
+        
+        // 图片
         visuals: {
-          mainImage: listing?.image || listing?.main_image || listing?.imageUrl || null,
-          detailImages: listing?.detail_images || []
+          mainImage: data?.image || data?.main_image || null,
+          detailImages: data?.detail_images || []
         }
       };
       
@@ -147,8 +166,11 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
           error: '未能提取到有效信息'
         });
       } else {
+        // ✅ 如果有痛点数据，直接标记为 completed（跳过深度分析步骤）
+        const hasDeepAnalysis = extractedData.painPoints.length > 0 || extractedData.opportunities.length > 0;
+        
         updateCompetitor(index, {
-          status: 'extracted',
+          status: hasDeepAnalysis ? 'completed' : 'extracted',
           ...extractedData
         });
       }
@@ -192,9 +214,12 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setActiveStep(2);
   }
 
-  // ========== 深度分析（模拟，后续可对接 Claude）==========
+  // ========== 深度分析（汇总已提取的数据生成报告）==========
   async function handleDeepAnalysis() {
-    const extractedCompetitors = competitors.filter(c => c.status === 'extracted' || c.status === 'completed');
+    const extractedCompetitors = competitors.filter(c => 
+      c.status === 'extracted' || c.status === 'completed'
+    );
+    
     if (extractedCompetitors.length === 0) {
       alert('请先提取竞品数据');
       return;
@@ -204,28 +229,22 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setActiveStep(3);
 
     try {
-      // 对每个竞品生成痛点分析（模拟）
+      // 将所有 extracted 状态的竞品标记为 completed
       for (let i = 0; i < competitors.length; i++) {
         if (competitors[i].status === 'extracted') {
-          updateCompetitor(i, { status: 'analyzing' });
-          
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // 生成模拟痛点（后续可对接 Claude API）
-          const mockPainPoints = generateMockPainPoints(competitors[i].basicData?.name);
-          updateCompetitor(i, {
-            status: 'completed',
-            painPoints: mockPainPoints
-          });
+          updateCompetitor(i, { status: 'completed' });
         }
       }
 
-      // 生成综合分析报告
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const analysisData = generateAnalysisFromCompetitors(
-        competitors.filter(c => c.status === 'completed')
+      // 等待状态更新
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // ✅ 直接从已提取的数据生成综合报告
+      const completedCompetitors = competitors.filter(c => 
+        c.status === 'completed' || c.status === 'extracted'
       );
+      
+      const analysisData = generateAnalysisFromCompetitors(completedCompetitors);
       setAnalysisResult(analysisData);
       
       setActiveStep(4);
@@ -236,61 +255,109 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     }
   }
 
-  // 从竞品数据生成分析报告
+  // ✅ 从竞品数据生成综合分析报告
   function generateAnalysisFromCompetitors(completedCompetitors) {
-    // 提取价格数据
+    // 提取所有价格
     const prices = completedCompetitors
       .map(c => c.basicData?.price)
       .filter(p => p)
-      .map(p => parseFloat(p.replace(/[^0-9.]/g, '')))
+      .map(p => parseFloat(String(p).replace(/[^0-9.]/g, '')))
       .filter(n => !isNaN(n) && n > 0);
     
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
     const avgPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
 
-    // 收集所有痛点
+    // ✅ 汇总所有痛点
     const allPainPoints = completedCompetitors
       .flatMap(c => c.painPoints || [])
       .reduce((acc, pp) => {
-        const existing = acc.find(p => p.category === pp.category);
+        const key = pp.category || pp.dimension || '其他';
+        const existing = acc.find(p => p.category === key);
         if (existing) {
-          existing.count += 1;
+          existing.count = (existing.count || 1) + 1;
+          if (!existing.descriptions) existing.descriptions = [existing.description];
+          existing.descriptions.push(pp.description);
         } else {
-          acc.push({ ...pp, count: 1 });
+          acc.push({ 
+            category: key, 
+            description: pp.description || '',
+            frequency: pp.frequency || '中频',
+            opportunity: pp.opportunity || '',
+            count: 1 
+          });
         }
         return acc;
       }, [])
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => (b.count || 0) - (a.count || 0));
 
+    // ✅ 汇总所有差异化机会
+    const allOpportunities = completedCompetitors
+      .flatMap(c => c.opportunities || [])
+      .reduce((acc, opp) => {
+        const key = opp.dimension || opp.category || '其他';
+        const existing = acc.find(o => o.dimension === key);
+        if (existing) {
+          if (!existing.suggestions.includes(opp.suggestion)) {
+            existing.suggestions.push(opp.suggestion);
+          }
+        } else {
+          acc.push({
+            dimension: key,
+            priority: opp.priority || '中',
+            suggestions: [opp.suggestion || opp.description || '']
+          });
+        }
+        return acc;
+      }, []);
+
+    // 如果没有从 API 获取到机会，使用默认的
+    const opportunities = allOpportunities.length > 0 ? allOpportunities : [
+      { dimension: '产品升级', priority: '高', suggestions: ['优化配方', '升级包装', '增加容量'] },
+      { dimension: '定价策略', priority: '中', suggestions: ['性价比定位', '套装优惠'] },
+      { dimension: '营销差异', priority: '中', suggestions: ['KOC种草', '场景化内容'] },
+      { dimension: '服务承诺', priority: '高', suggestions: ['破损包赔', '效果保证'] },
+    ];
+
+    // 汇总卖点
+    const allSellingPoints = completedCompetitors
+      .flatMap(c => c.sellingPoints || [])
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .slice(0, 10);
+
+    // 生成核心结论
+    const topPainPoint = allPainPoints[0]?.category || '产品体验';
+    const competitorCount = completedCompetitors.length;
+    
     return {
       summary: {
-        conclusion: `分析了 ${completedCompetitors.length} 个竞品，发现主要痛点集中在${allPainPoints[0]?.category || '产品体验'}方面，建议从差异化定位切入。`
+        conclusion: `分析了 ${competitorCount} 个竞品，发现主要痛点集中在「${topPainPoint}」方面。${
+          avgPrice > 0 ? `平均价格约 Rp ${Math.round(avgPrice).toLocaleString()}，` : ''
+        }建议从差异化定位和解决用户痛点切入市场。`,
+        competitorCount,
+        commonSellingPoints: allSellingPoints.slice(0, 5)
       },
       marketAssessment: {
         volume: '中等',
-        competition: '中等',
-        margin: '较高',
+        competition: competitorCount >= 3 ? '激烈' : '中等',
+        margin: avgPrice > 50000 ? '较高' : '中等',
         recommendation: '推荐进入'
       },
       priceAnalysis: {
         min: minPrice ? `Rp ${minPrice.toLocaleString()}` : '-',
         median: avgPrice ? `Rp ${Math.round(avgPrice).toLocaleString()}` : '-',
         max: maxPrice ? `Rp ${maxPrice.toLocaleString()}` : '-',
-        suggestion: avgPrice ? `建议定价 Rp ${Math.round(avgPrice * 0.9).toLocaleString()} - ${Math.round(avgPrice * 1.1).toLocaleString()}` : '待定'
+        suggestion: avgPrice 
+          ? `建议定价 Rp ${Math.round(avgPrice * 0.85).toLocaleString()} - ${Math.round(avgPrice * 1.05).toLocaleString()}，略低于市场平均以获取竞争优势` 
+          : '需要更多数据'
       },
-      painPointsSummary: allPainPoints.slice(0, 4),
-      opportunities: [
-        { dimension: '产品升级', priority: '高', suggestions: ['优化配方', '升级包装', '增加容量'] },
-        { dimension: '定价策略', priority: '中', suggestions: ['性价比定位', '套装优惠'] },
-        { dimension: '营销差异', priority: '中', suggestions: ['KOC种草', '场景化内容'] },
-        { dimension: '服务承诺', priority: '高', suggestions: ['破损包赔', '效果保证'] },
-      ],
+      painPointsSummary: allPainPoints.slice(0, 5),
+      opportunities: opportunities.slice(0, 4),
       recommendations: {
-        positioning: '差异化定位，主打品质与性价比',
-        pricing: avgPrice ? `Rp ${Math.round(avgPrice * 0.95).toLocaleString()}` : '待定',
-        differentiators: ['升级包装', '复合配方', '服务承诺'],
-        pitfalls: ['避免过度宣传', '注意包装质量', '控制成本']
+        positioning: completedCompetitors[0]?.pricePositioning || '差异化定位，主打品质与性价比',
+        pricing: avgPrice ? `Rp ${Math.round(avgPrice * 0.9).toLocaleString()}` : '待定',
+        differentiators: allOpportunities.slice(0, 3).map(o => o.suggestions[0]).filter(Boolean),
+        pitfalls: allPainPoints.slice(0, 3).map(p => `避免${p.category}问题：${p.description?.slice(0, 30) || ''}`).filter(Boolean)
       }
     };
   }
@@ -1358,23 +1425,34 @@ function ReportSection({ icon, title, children }) {
   );
 }
 
-// ==================== 辅助函数：生成模拟痛点 ====================
-function generateMockPainPoints(productName) {
-  return [
-    {
-      category: '效果预期',
-      description: '实际效果与宣传不符，用户期望过高',
-      opportunity: '设置合理预期，提供真实效果展示'
-    },
-    {
-      category: '性价比',
-      description: '价格偏高或容量偏小',
-      opportunity: '加大容量或提供套装优惠'
-    },
-    {
-      category: '使用体验',
-      description: '使用感受不佳（泡沫、气味、质地等）',
-      opportunity: '优化配方改善使用体验'
-    }
-  ];
+// ==================== 辅助函数 ====================
+
+// 解析成分（兼容多种格式）
+function parseIngredientsHelper(ingredientsData) {
+  if (!ingredientsData) return [];
+  
+  // 如果已经是数组格式 [{name, benefit}]
+  if (Array.isArray(ingredientsData)) {
+    return ingredientsData.map(item => {
+      if (typeof item === 'string') {
+        return { name: item, benefit: '' };
+      }
+      return {
+        name: item.name || item.ingredient || '',
+        benefit: item.benefit || item.effect || item.功效 || ''
+      };
+    });
+  }
+  
+  // 如果是字符串，按逗号分割
+  if (typeof ingredientsData === 'string') {
+    return ingredientsData
+      .split(/[,，、]/)
+      .map(s => s.trim())
+      .filter(s => s)
+      .slice(0, 6)
+      .map(name => ({ name, benefit: '' }));
+  }
+  
+  return [];
 }
