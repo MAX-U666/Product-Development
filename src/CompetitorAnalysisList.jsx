@@ -1,511 +1,613 @@
-// src/CompetitorAnalysisList.jsx1
-// 竞品分析库 - 列表页面（使用真实API）
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, Eye, Trash2, ArrowRight, Filter } from 'lucide-react';
-import { fetchCompetitorAnalyses, deleteCompetitorAnalysis } from './api';
+// src/CompetitorAnalysisDetail.jsx
+// 竞品分析报告详情弹窗
 
-// 品类选项
-const CATEGORIES = [
-  { value: 'all', label: '全部品类' },
-  { value: 'Shampoo', label: '洗发水' },
-  { value: 'Conditioner', label: '护发素' },
-  { value: 'BodyWash', label: '沐浴露' },
-  { value: 'BodyLotion', label: '身体乳' },
-  { value: 'Toothpaste', label: '牙膏' },
-  { value: 'HairMask', label: '发膜' },
-];
+import React, { useState } from 'react';
+import { 
+  X, TrendingUp, AlertTriangle, Lightbulb, Target, 
+  DollarSign, Package, ChevronDown, ChevronUp, 
+  ExternalLink, Copy, Check
+} from 'lucide-react';
 
-// 市场选项
-const MARKETS = [
-  { value: 'all', label: '全部市场' },
-  { value: 'Indonesia', label: '🇮🇩 印尼' },
-  { value: 'Malaysia', label: '🇲🇾 马来西亚' },
-  { value: 'Thailand', label: '🇹🇭 泰国' },
-  { value: 'Philippines', label: '🇵🇭 菲律宾' },
-  { value: 'Vietnam', label: '🇻🇳 越南' },
-];
+export default function CompetitorAnalysisDetail({ analysis, onClose, onUseForProduct }) {
+  const [expandedCompetitor, setExpandedCompetitor] = useState(null);
+  const [copied, setCopied] = useState(false);
 
-export default function CompetitorAnalysisList({ 
-  currentUser, 
-  onCreateNew, 
-  onViewDetail,
-  onUseForProduct 
-}) {
-  const [analyses, setAnalyses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // 筛选状态
-  const [searchText, setSearchText] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedMarket, setSelectedMarket] = useState('all');
+  if (!analysis) return null;
 
-  // 加载数据
-  useEffect(() => {
-    loadAnalyses();
-  }, [selectedCategory, selectedMarket]);
+  // 解析竞品数据
+  const competitors = analysis.competitors || [];
+  const painPoints = analysis.pain_points_summary || [];
+  const opportunities = analysis.opportunities || [];
+  const recommendations = analysis.recommendations || {};
+  const summary = analysis.summary || {};
 
-  const loadAnalyses = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchCompetitorAnalyses({
-        category: selectedCategory,
-        market: selectedMarket
-      });
-      setAnalyses(data);
-    } catch (err) {
-      console.error('加载竞品分析失败:', err);
-      setError('加载失败，请重试');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 复制报告摘要
+  const handleCopy = () => {
+    const text = `
+【${analysis.title}】
+品类：${analysis.category} | 市场：${analysis.market}
 
-  // 搜索过滤
-  const filteredAnalyses = analyses.filter(item => {
-    if (!searchText) return true;
-    const search = searchText.toLowerCase();
-    return (
-      item.title?.toLowerCase().includes(search) ||
-      item.category?.toLowerCase().includes(search) ||
-      item.summary?.conclusion?.toLowerCase().includes(search)
-    );
-  });
+📊 核心结论：
+${summary.conclusion || '无'}
 
-  // 删除分析
-  const handleDelete = async (analysis) => {
-    const ok = window.confirm(`确定删除「${analysis.title}」吗？\n\n⚠️ 删除后不可恢复。`);
-    if (!ok) return;
+😣 主要痛点：
+${painPoints.map((p, i) => `${i + 1}. ${p.category}: ${p.description}`).join('\n')}
 
-    try {
-      await deleteCompetitorAnalysis(analysis.id);
-      setAnalyses(prev => prev.filter(a => a.id !== analysis.id));
-    } catch (err) {
-      console.error('删除失败:', err);
-      alert('删除失败：' + err.message);
-    }
-  };
+💡 差异化机会：
+${opportunities.map((o, i) => `${i + 1}. ${o.dimension}: ${o.suggestion || o.suggestions?.join(', ')}`).join('\n')}
 
-  // 格式化日期
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
-  };
+🎯 建议定位：${recommendations.positioning || '无'}
+💰 建议定价：${recommendations.pricing || '无'}
+    `.trim();
 
-  // 获取品类标签颜色
-  const getCategoryColor = (category) => {
-    const colors = {
-      'Shampoo': { bg: '#dbeafe', text: '#1d4ed8' },
-      'Conditioner': { bg: '#fce7f3', text: '#be185d' },
-      'BodyWash': { bg: '#d1fae5', text: '#047857' },
-      'BodyLotion': { bg: '#fef3c7', text: '#b45309' },
-      'Toothpaste': { bg: '#e0e7ff', text: '#4338ca' },
-      'HairMask': { bg: '#f3e8ff', text: '#7c3aed' },
-    };
-    return colors[category] || { bg: '#f3f4f6', text: '#374151' };
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div style={{ padding: '0' }}>
-      {/* 头部 */}
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 100,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: '20px'
+    }}>
       <div style={{
+        width: '100%',
+        maxWidth: '1000px',
+        maxHeight: '90vh',
+        backgroundColor: '#F5F5F7',
+        borderRadius: '16px',
+        overflow: 'hidden',
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '24px'
+        flexDirection: 'column'
       }}>
-        <div>
-          <h1 style={{ 
-            fontSize: '24px', 
-            fontWeight: '700', 
-            color: '#1e293b',
-            margin: '0 0 8px 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
-            📊 竞品分析库
-          </h1>
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
-            保存的竞品分析报告，可用于 AI 创建产品
-          </p>
-        </div>
-        
-        <button
-          onClick={onCreateNew}
-          style={{
-            padding: '12px 20px',
-            borderRadius: '10px',
-            border: 'none',
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            color: 'white',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-          }}
-        >
-          <Plus size={18} />
-          新建分析
-        </button>
-      </div>
-
-      {/* 搜索和筛选 */}
-      <div style={{
-        display: 'flex',
-        gap: '12px',
-        marginBottom: '20px',
-        padding: '16px',
-        backgroundColor: 'white',
-        borderRadius: '12px',
-        border: '1px solid #e2e8f0'
-      }}>
-        {/* 搜索框 */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          <Search size={18} style={{ 
-            position: 'absolute', 
-            left: '12px', 
-            top: '50%', 
-            transform: 'translateY(-50%)',
-            color: '#94a3b8'
-          }} />
-          <input
-            type="text"
-            placeholder="搜索报告标题、品类..."
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px 10px 40px',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-              fontSize: '14px',
-              color: '#1e293b',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        {/* 品类筛选 */}
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            fontSize: '14px',
-            color: '#1e293b',
-            backgroundColor: 'white',
-            cursor: 'pointer',
-            minWidth: '140px'
-          }}
-        >
-          {CATEGORIES.map(c => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </select>
-
-        {/* 市场筛选 */}
-        <select
-          value={selectedMarket}
-          onChange={(e) => setSelectedMarket(e.target.value)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            fontSize: '14px',
-            color: '#1e293b',
-            backgroundColor: 'white',
-            cursor: 'pointer',
-            minWidth: '140px'
-          }}
-        >
-          {MARKETS.map(m => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* 加载状态 */}
-      {loading && (
+        {/* 头部 */}
         <div style={{
-          padding: '60px',
-          textAlign: 'center',
-          color: '#64748b'
+          padding: '20px 24px',
+          background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
+          color: 'white'
         }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
-          <p>加载中...</p>
-        </div>
-      )}
-
-      {/* 错误状态 */}
-      {error && (
-        <div style={{
-          padding: '40px',
-          textAlign: 'center',
-          backgroundColor: '#fef2f2',
-          borderRadius: '12px',
-          color: '#dc2626'
-        }}>
-          <p>{error}</p>
-          <button
-            onClick={loadAnalyses}
-            style={{
-              marginTop: '12px',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: '1px solid #dc2626',
-              backgroundColor: 'white',
-              color: '#dc2626',
-              cursor: 'pointer'
-            }}
-          >
-            重试
-          </button>
-        </div>
-      )}
-
-      {/* 空状态 */}
-      {!loading && !error && filteredAnalyses.length === 0 && (
-        <div style={{
-          padding: '60px',
-          textAlign: 'center',
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          border: '1px solid #e2e8f0'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📊</div>
-          <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '20px' }}>
-            {searchText ? '没有找到匹配的分析报告' : '还没有竞品分析报告'}
-          </p>
-          <button
-            onClick={onCreateNew}
-            style={{
-              padding: '12px 24px',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-              color: 'white',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            创建第一个分析
-          </button>
-        </div>
-      )}
-
-      {/* 分析列表 */}
-      {!loading && !error && filteredAnalyses.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {filteredAnalyses.map(analysis => {
-            const categoryColor = getCategoryColor(analysis.category);
-            const competitorCount = analysis.competitors?.length || 0;
-            
-            // 从 summary 或 opportunities 中提取关键信息
-            const keyFindings = [];
-            if (analysis.pain_points_summary?.[0]) {
-              keyFindings.push(`🔴 ${analysis.pain_points_summary[0].category || analysis.pain_points_summary[0]}`);
-            }
-            if (analysis.summary?.priceRange) {
-              keyFindings.push(`💰 价格带 ${analysis.summary.priceRange}`);
-            }
-            if (analysis.opportunities?.[0]) {
-              keyFindings.push(`💡 ${analysis.opportunities[0].suggestion || analysis.opportunities[0]}`);
-            }
-
-            return (
-              <div
-                key={analysis.id}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '700' }}>
+                📊 {analysis.title}
+              </h2>
+              <div style={{ display: 'flex', gap: '12px', fontSize: '13px', opacity: 0.9 }}>
+                <span>🏷️ {analysis.category}</span>
+                <span>🌏 {analysis.market}</span>
+                <span>🛒 {analysis.platform || 'Shopee'}</span>
+                <span>📅 {new Date(analysis.created_at).toLocaleDateString('zh-CN')}</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={handleCopy}
                 style={{
-                  padding: '20px',
-                  backgroundColor: 'white',
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  fontSize: '13px',
+                  cursor: 'pointer',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: '20px'
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
               >
-                {/* 左侧：内容 */}
-                <div style={{ flex: 1 }}>
-                  {/* 标题行 */}
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '10px',
-                    marginBottom: '8px'
-                  }}>
-                    <h3 style={{ 
-                      margin: 0, 
-                      fontSize: '16px', 
-                      fontWeight: '600',
-                      color: '#1e293b'
-                    }}>
-                      {analysis.title}
-                    </h3>
-                    <span style={{
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      backgroundColor: categoryColor.bg,
-                      color: categoryColor.text
-                    }}>
-                      {analysis.category}
-                    </span>
-                    <span style={{
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      backgroundColor: '#f1f5f9',
-                      color: '#475569'
-                    }}>
-                      {analysis.market}
-                    </span>
-                  </div>
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? '已复制' : '复制摘要'}
+              </button>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
 
-                  {/* 结论摘要 */}
-                  <p style={{ 
-                    margin: '0 0 12px 0', 
-                    fontSize: '14px', 
-                    color: '#64748b',
-                    lineHeight: '1.5'
-                  }}>
-                    {analysis.summary?.conclusion || '暂无分析结论'}
-                  </p>
+          {/* 核心结论 */}
+          {summary.conclusion && (
+            <div style={{
+              marginTop: '16px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              borderRadius: '8px',
+              fontSize: '14px',
+              lineHeight: '1.6'
+            }}>
+              🎯 <strong>核心结论：</strong>{summary.conclusion}
+            </div>
+          )}
+        </div>
 
-                  {/* 元数据 */}
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '16px', 
-                    fontSize: '12px', 
-                    color: '#94a3b8',
-                    marginBottom: '10px'
-                  }}>
-                    <span>📅 {formatDate(analysis.created_at)}</span>
-                    <span>🔗 {competitorCount} 个竞品</span>
-                    <span>↗️ 已使用 {analysis.used_count || 0} 次</span>
-                  </div>
+        {/* 内容区 */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+          
+          {/* 价格分析 */}
+          <Section icon="💰" title="价格带分析">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              <PriceCard 
+                label="最低价" 
+                value={summary.priceAnalysis?.min || analysis.price_min || '-'} 
+                color="#10B981" 
+              />
+              <PriceCard 
+                label="平均价" 
+                value={summary.priceAnalysis?.median || analysis.price_avg || '-'} 
+                color="#3B82F6" 
+                highlight 
+              />
+              <PriceCard 
+                label="最高价" 
+                value={summary.priceAnalysis?.max || analysis.price_max || '-'} 
+                color="#EF4444" 
+              />
+            </div>
+            {(summary.priceAnalysis?.suggestion || recommendations.pricing) && (
+              <div style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                backgroundColor: '#FEF3C7',
+                borderRadius: '8px',
+                fontSize: '13px',
+                color: '#92400E'
+              }}>
+                💡 <strong>定价建议：</strong>
+                {summary.priceAnalysis?.suggestion || recommendations.pricing}
+              </div>
+            )}
+          </Section>
 
-                  {/* 关键发现标签 */}
-                  {keyFindings.length > 0 && (
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {keyFindings.map((finding, idx) => (
-                        <span
-                          key={idx}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            backgroundColor: '#fef3c7',
-                            color: '#b45309'
-                          }}
-                        >
-                          {finding}
+          {/* 竞品列表 */}
+          {competitors.length > 0 && (
+            <Section icon="📦" title={`竞品详情 (${competitors.length}个)`}>
+              {competitors.map((comp, index) => (
+                <CompetitorCard
+                  key={index}
+                  competitor={comp}
+                  index={index}
+                  isExpanded={expandedCompetitor === index}
+                  onToggle={() => setExpandedCompetitor(
+                    expandedCompetitor === index ? null : index
+                  )}
+                />
+              ))}
+            </Section>
+          )}
+
+          {/* 差评痛点 */}
+          {painPoints.length > 0 && (
+            <Section icon="😣" title="差评痛点汇总">
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {painPoints.map((point, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '14px 16px',
+                      backgroundColor: '#FEF2F2',
+                      borderRadius: '10px',
+                      borderLeft: '4px solid #EF4444'
+                    }}
+                  >
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      marginBottom: '6px'
+                    }}>
+                      <span style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600', 
+                        color: '#DC2626' 
+                      }}>
+                        {point.category}
+                      </span>
+                      {point.frequency && (
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: '#FECACA',
+                          color: '#991B1B'
+                        }}>
+                          {point.frequency}
                         </span>
-                      ))}
+                      )}
+                      {point.count && (
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: '#FECACA',
+                          color: '#991B1B'
+                        }}>
+                          出现 {point.count} 次
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ 
+                      margin: 0, 
+                      fontSize: '13px', 
+                      color: '#1F2937',
+                      lineHeight: '1.5'
+                    }}>
+                      {point.description}
+                    </p>
+                    {point.opportunity && (
+                      <p style={{ 
+                        margin: '8px 0 0 0', 
+                        fontSize: '12px', 
+                        color: '#059669' 
+                      }}>
+                        💡 机会: {point.opportunity}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* 差异化机会 */}
+          {opportunities.length > 0 && (
+            <Section icon="🚀" title="差异化机会">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                {opportunities.map((opp, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '14px 16px',
+                      backgroundColor: '#ECFDF5',
+                      borderRadius: '10px',
+                      borderLeft: `4px solid ${opp.priority === '高' ? '#10B981' : '#3B82F6'}`
+                    }}
+                  >
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      marginBottom: '8px'
+                    }}>
+                      <span style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600', 
+                        color: '#1F2937' 
+                      }}>
+                        {opp.dimension}
+                      </span>
+                      {opp.priority && (
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: opp.priority === '高' ? '#10B981' : '#3B82F6',
+                          color: 'white'
+                        }}>
+                          优先级: {opp.priority}
+                        </span>
+                      )}
+                    </div>
+                    {opp.suggestion && (
+                      <p style={{ margin: 0, fontSize: '13px', color: '#374151' }}>
+                        {opp.suggestion}
+                      </p>
+                    )}
+                    {opp.suggestions && Array.isArray(opp.suggestions) && (
+                      <ul style={{ 
+                        margin: 0, 
+                        paddingLeft: '16px', 
+                        fontSize: '13px', 
+                        color: '#374151' 
+                      }}>
+                        {opp.suggestions.map((s, i) => (
+                          <li key={i} style={{ marginBottom: '4px' }}>{s}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* 产品开发建议 */}
+          {(recommendations.positioning || recommendations.pricing || recommendations.differentiators) && (
+            <Section icon="🎯" title="产品开发建议">
+              <div style={{
+                padding: '16px',
+                backgroundColor: '#F5F3FF',
+                borderRadius: '12px',
+                border: '1px solid #C4B5FD'
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  {recommendations.positioning && (
+                    <div>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#7C3AED' }}>
+                        📍 建议定位
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                        {recommendations.positioning}
+                      </p>
+                    </div>
+                  )}
+                  {recommendations.pricing && (
+                    <div>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#7C3AED' }}>
+                        💰 建议定价
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#1F2937' }}>
+                        {recommendations.pricing}
+                      </p>
+                    </div>
+                  )}
+                  {recommendations.differentiators && recommendations.differentiators.length > 0 && (
+                    <div>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#7C3AED' }}>
+                        ⭐ 核心差异点
+                      </h4>
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#1F2937' }}>
+                        {recommendations.differentiators.map((d, i) => (
+                          <li key={i}>{d}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {recommendations.pitfalls && recommendations.pitfalls.length > 0 && (
+                    <div>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#DC2626' }}>
+                        ⚠️ 规避的坑
+                      </h4>
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#1F2937' }}>
+                        {recommendations.pitfalls.map((p, i) => (
+                          <li key={i}>{p}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
-
-                {/* 右侧：操作按钮 */}
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: '8px',
-                  minWidth: '120px'
-                }}>
-                  <button
-                    onClick={() => onViewDetail?.(analysis)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                      color: 'white',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Eye size={14} />
-                    查看
-                  </button>
-                  
-                  <button
-                    onClick={() => onUseForProduct?.(analysis)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #10b981, #059669)',
-                      color: 'white',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <ArrowRight size={14} />
-                    用于创建产品
-                  </button>
-                  
-                  <button
-                    onClick={() => handleDelete(analysis)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: '1px solid #e2e8f0',
-                      backgroundColor: 'white',
-                      color: '#64748b',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    删除
-                  </button>
-                </div>
               </div>
-            );
-          })}
+            </Section>
+          )}
         </div>
-      )}
 
-      {/* 统计信息 */}
-      {!loading && filteredAnalyses.length > 0 && (
+        {/* 底部操作 */}
         <div style={{
-          marginTop: '20px',
-          padding: '12px 16px',
-          backgroundColor: '#f8fafc',
-          borderRadius: '8px',
-          fontSize: '13px',
-          color: '#64748b',
-          textAlign: 'center'
+          padding: '16px 24px',
+          borderTop: '1px solid #E5E5EA',
+          backgroundColor: 'white',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '12px'
         }}>
-          共 {filteredAnalyses.length} 个分析报告
-          {(selectedCategory !== 'all' || selectedMarket !== 'all' || searchText) && (
-            <span>（已筛选）</span>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '8px',
+              border: '1px solid #E5E5EA',
+              backgroundColor: 'white',
+              color: '#6B7280',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            关闭
+          </button>
+          <button
+            onClick={() => onUseForProduct?.(analysis)}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #10B981, #059669)',
+              color: 'white',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Target size={16} />
+            基于此分析创建产品
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== 子组件 ====================
+
+function Section({ icon, title, children }) {
+  return (
+    <div style={{
+      backgroundColor: 'white',
+      borderRadius: '12px',
+      padding: '16px 20px',
+      marginBottom: '16px',
+      border: '1px solid #E5E5EA'
+    }}>
+      <h3 style={{ 
+        margin: '0 0 14px 0', 
+        fontSize: '15px', 
+        fontWeight: '600', 
+        color: '#1F2937',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        {icon} {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function PriceCard({ label, value, color, highlight }) {
+  return (
+    <div style={{
+      padding: '14px',
+      borderRadius: '10px',
+      backgroundColor: highlight ? '#EFF6FF' : '#F9FAFB',
+      border: highlight ? '2px solid #3B82F6' : '1px solid #E5E5EA',
+      textAlign: 'center'
+    }}>
+      <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '6px' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: '18px', fontWeight: '700', color }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function CompetitorCard({ competitor, index, isExpanded, onToggle }) {
+  // 兼容不同的数据结构
+  const name = competitor.basicData?.name || competitor.name || competitor.title || `竞品 ${index + 1}`;
+  const price = competitor.basicData?.price || competitor.price || '-';
+  const brand = competitor.basicData?.brand || competitor.brand || '';
+  const rating = competitor.basicData?.rating || competitor.rating || '';
+  const sales = competitor.basicData?.sales || competitor.sales || '';
+  const sellingPoints = competitor.sellingPoints || competitor.selling_points || [];
+  const ingredients = competitor.ingredients || [];
+  const painPoints = competitor.painPoints || competitor.pain_points || [];
+  const url = competitor.url || competitor.source_url || '';
+
+  return (
+    <div style={{
+      backgroundColor: '#F9FAFB',
+      borderRadius: '10px',
+      marginBottom: '10px',
+      border: '1px solid #E5E5EA',
+      overflow: 'hidden'
+    }}>
+      {/* 头部（可点击展开） */}
+      <div
+        onClick={onToggle}
+        style={{
+          padding: '14px 16px',
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}
+      >
+        <div>
+          <div style={{ 
+            fontSize: '14px', 
+            fontWeight: '600', 
+            color: '#1F2937',
+            marginBottom: '4px'
+          }}>
+            {name}
+          </div>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#6B7280' }}>
+            {price && <span>💰 {price}</span>}
+            {brand && <span>🏷️ {brand}</span>}
+            {rating && <span>⭐ {rating}</span>}
+            {sales && <span>🛒 {sales}</span>}
+          </div>
+        </div>
+        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </div>
+
+      {/* 展开详情 */}
+      {isExpanded && (
+        <div style={{ padding: '0 16px 16px', borderTop: '1px solid #E5E5EA' }}>
+          {/* 卖点 */}
+          {sellingPoints.length > 0 && (
+            <div style={{ marginTop: '12px' }}>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#6B7280' }}>
+                ⭐ 核心卖点
+              </h4>
+              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#374151' }}>
+                {sellingPoints.slice(0, 5).map((sp, i) => (
+                  <li key={i} style={{ marginBottom: '4px' }}>
+                    {typeof sp === 'string' ? sp : sp.text || sp.point || JSON.stringify(sp)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 成分 */}
+          {ingredients.length > 0 && (
+            <div style={{ marginTop: '12px' }}>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#6B7280' }}>
+                🧪 主打成分
+              </h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {ingredients.slice(0, 5).map((ing, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: '#E0E7FF',
+                      color: '#4338CA',
+                      fontSize: '11px'
+                    }}
+                  >
+                    {typeof ing === 'string' ? ing : ing.name || JSON.stringify(ing)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 痛点 */}
+          {painPoints.length > 0 && (
+            <div style={{ marginTop: '12px' }}>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#6B7280' }}>
+                😣 差评痛点
+              </h4>
+              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#DC2626' }}>
+                {painPoints.slice(0, 3).map((pp, i) => (
+                  <li key={i} style={{ marginBottom: '4px' }}>
+                    {pp.category}: {pp.description}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 链接 */}
+          {url && (
+            <div style={{ marginTop: '12px' }}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: '12px',
+                  color: '#3B82F6',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <ExternalLink size={12} />
+                查看原链接
+              </a>
+            </div>
           )}
         </div>
       )}
