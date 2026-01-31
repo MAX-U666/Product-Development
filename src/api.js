@@ -924,3 +924,154 @@ export async function incrementAnalysisUsage(id) {
   }
   return true;
 }
+
+
+
+// ============================================
+// 竞品分析 API - 添加到 src/api.js 末尾
+// ============================================
+
+// 保存竞品分析报告
+export async function saveCompetitorAnalysis(data) {
+  const { data: result, error } = await supabase
+    .from('competitor_analyses')
+    .insert([data])
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('保存竞品分析失败:', error);
+    throw error;
+  }
+  return result;
+}
+
+// 更新竞品分析报告
+export async function updateCompetitorAnalysis(id, data) {
+  const { data: result, error } = await supabase
+    .from('competitor_analyses')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('更新竞品分析失败:', error);
+    throw error;
+  }
+  return result;
+}
+
+// 获取竞品分析报告列表
+export async function fetchCompetitorAnalyses(filters = {}) {
+  let query = supabase
+    .from('competitor_analyses')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  // 按品类筛选
+  if (filters.category && filters.category !== 'all') {
+    query = query.eq('category', filters.category);
+  }
+  
+  // 按市场筛选
+  if (filters.market && filters.market !== 'all') {
+    query = query.eq('market', filters.market);
+  }
+  
+  // 按状态筛选
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+  
+  // 搜索标题
+  if (filters.search) {
+    query = query.ilike('title', `%${filters.search}%`);
+  }
+  
+  const { data, error } = await query;
+  
+  if (error) {
+    console.error('获取竞品分析列表失败:', error);
+    throw error;
+  }
+  return data || [];
+}
+
+// 获取单个竞品分析报告
+export async function fetchCompetitorAnalysisById(id) {
+  const { data, error } = await supabase
+    .from('competitor_analyses')
+    .select('*')
+    .eq('id', id)
+    .single();
+  
+  if (error) {
+    console.error('获取竞品分析详情失败:', error);
+    throw error;
+  }
+  return data;
+}
+
+// 删除竞品分析报告
+export async function deleteCompetitorAnalysis(id) {
+  const { error } = await supabase
+    .from('competitor_analyses')
+    .delete()
+    .eq('id', id);
+  
+  if (error) {
+    console.error('删除竞品分析失败:', error);
+    throw error;
+  }
+  return true;
+}
+
+// 更新竞品分析使用次数
+export async function incrementAnalysisUsage(id) {
+  // 先获取当前值
+  const { data: current } = await supabase
+    .from('competitor_analyses')
+    .select('used_count')
+    .eq('id', id)
+    .single();
+  
+  // 更新
+  const { error } = await supabase
+    .from('competitor_analyses')
+    .update({ 
+      used_count: (current?.used_count || 0) + 1,
+      last_used_at: new Date().toISOString()
+    })
+    .eq('id', id);
+  
+  if (error) {
+    console.error('更新使用次数失败:', error);
+    throw error;
+  }
+  return true;
+}
+
+// 记录分析与产品的关联
+export async function linkAnalysisToProduct(analysisId, productId, draftId = null) {
+  const { data, error } = await supabase
+    .from('analysis_product_links')
+    .insert([{
+      analysis_id: analysisId,
+      product_id: productId,
+      draft_id: draftId
+    }])
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('关联分析与产品失败:', error);
+    throw error;
+  }
+  
+  // 同时更新使用次数
+  await incrementAnalysisUsage(analysisId);
+  
+  return data;
+}
+
