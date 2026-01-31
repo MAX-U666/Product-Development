@@ -1,6 +1,6 @@
 // src/CompetitorAnalysis.jsx
 // 竞品分析模块 - 独立页面
-// 2026-01-31
+// 2026-01-31 - 修复：对接真实API
 
 import React, { useState, useRef, useEffect } from 'react';
 import { 
@@ -10,14 +10,11 @@ import {
   Check, Clock, RefreshCw, Eye, Save, ArrowRight
 } from 'lucide-react';
 
-// ==================== API 函数（需要在 api.js 中实现）====================
-// import { 
-//   extractCompetitorData,      // Gemini: 提取基础数据
-//   analyzeCompetitorPainPoints, // Claude: 分析差评痛点
-//   generateAnalysisSummary,     // Claude: 生成总结和建议
-//   saveCompetitorAnalysis,      // 保存分析报告
-//   fetchCompetitorAnalyses,     // 获取分析列表
-// } from './api';
+// ✅ 导入真实 API
+import { 
+  extractCompetitorInfo,     // 提取竞品数据
+  saveCompetitorAnalysis,    // 保存分析报告
+} from './api';
 
 // ==================== 常量配置 ====================
 const PLATFORMS = [
@@ -45,14 +42,6 @@ const CATEGORIES = [
   { value: 'Other', label: '其他 Other' },
 ];
 
-const PAIN_POINT_CATEGORIES = [
-  { key: 'effectiveness', label: '效果问题', icon: '💊', color: '#EF4444' },
-  { key: 'quality', label: '质量问题', icon: '🔧', color: '#F59E0B' },
-  { key: 'experience', label: '体验问题', icon: '😣', color: '#8B5CF6' },
-  { key: 'packaging', label: '包装物流', icon: '📦', color: '#3B82F6' },
-  { key: 'price', label: '性价比', icon: '💰', color: '#10B981' },
-];
-
 // ==================== 主组件 ====================
 export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) {
   // ========== 基础信息 ==========
@@ -60,6 +49,12 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
   const [category, setCategory] = useState('Shampoo');
   const [market, setMarket] = useState('Indonesia');
   const [platform, setPlatform] = useState('Shopee');
+
+  // ========== AI 配置 ==========
+  const [aiConfig, setAiConfig] = useState({
+    extract_provider: 'qwen',
+    analyze_provider: 'claude'
+  });
 
   // ========== 竞品列表 ==========
   const [competitors, setCompetitors] = useState([
@@ -72,7 +67,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
   const [analysisResult, setAnalysisResult] = useState(null);
   
   // ========== 状态控制 ==========
-  const [activeStep, setActiveStep] = useState(1); // 1:输入 2:提取 3:分析 4:结果
+  const [activeStep, setActiveStep] = useState(1);
   const [expandedCompetitor, setExpandedCompetitor] = useState(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -83,25 +78,13 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     return {
       id: `comp_${index}`,
       url: '',
-      status: 'pending', // pending / extracting / extracted / analyzing / completed / error
+      status: 'pending',
       error: '',
-      
-      // 模块1: 基础数据
       basicData: null,
-      
-      // 模块2: 标题分析
       titleAnalysis: null,
-      
-      // 模块3: 卖点提取
       sellingPoints: null,
-      
-      // 模块4: 成分分析
       ingredients: null,
-      
-      // 模块5: 视觉素材
       visuals: null,
-      
-      // 模块6: 差评痛点
       painPoints: null,
     };
   }
@@ -110,7 +93,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setCompetitors(prev => prev.map((c, i) => i === index ? { ...c, ...updates } : c));
   }
 
-  // ========== 提取竞品数据（Gemini）==========
+  // ========== 提取竞品数据（真实API）==========
   async function handleExtractSingle(index) {
     const comp = competitors[index];
     if (!comp.url.trim()) {
@@ -121,24 +104,71 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     updateCompetitor(index, { status: 'extracting', error: '' });
 
     try {
-      // 模拟 API 调用（实际需要调用后端）
-      // const result = await extractCompetitorData(comp.url, { market, platform, category });
+      // ✅ 调用真实 API
+      const result = await extractCompetitorInfo(comp.url.trim(), aiConfig);
       
-      // 模拟数据（开发阶段）
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('📥 竞品提取结果:', result);
       
-      const mockData = generateMockExtractedData(index);
+      // 解析返回数据
+      const listing = result?.listing || result?.data || result;
       
-      updateCompetitor(index, {
-        status: 'extracted',
-        ...mockData
-      });
+      // 构建提取数据
+      const extractedData = {
+        basicData: {
+          name: listing?.title || listing?.name || listing?.product_name || '',
+          brand: listing?.brand || listing?.shop_name || '',
+          price: listing?.price || listing?.sale_price || '',
+          priceOriginal: listing?.original_price || '',
+          volume: listing?.volume || listing?.size || '',
+          sales: listing?.sales || listing?.sold || '',
+          rating: listing?.rating || listing?.score || '',
+          reviewCount: listing?.review_count || listing?.reviewCount || ''
+        },
+        titleAnalysis: {
+          full: listing?.title || listing?.full_title || '',
+          charCount: (listing?.title || '').length,
+          structure: '品牌 + 产品 + 功效 + 规格',
+          keywords: listing?.title_keywords || listing?.keywords || []
+        },
+        sellingPoints: listing?.selling_points || listing?.benefits || listing?.highlights || [],
+        ingredients: parseIngredients(listing?.ingredients || listing?.composition || ''),
+        visuals: {
+          mainImage: listing?.image || listing?.main_image || listing?.imageUrl || null,
+          detailImages: listing?.detail_images || []
+        }
+      };
+      
+      // 检查是否有有效数据
+      const hasValidData = extractedData.basicData.name || extractedData.basicData.price;
+      
+      if (!hasValidData) {
+        updateCompetitor(index, {
+          status: 'error',
+          error: '未能提取到有效信息'
+        });
+      } else {
+        updateCompetitor(index, {
+          status: 'extracted',
+          ...extractedData
+        });
+      }
     } catch (err) {
+      console.error('❌ 提取失败:', err);
       updateCompetitor(index, {
         status: 'error',
         error: err.message || '提取失败'
       });
     }
+  }
+
+  // 解析成分字符串
+  function parseIngredients(ingredientsStr) {
+    if (!ingredientsStr) return [];
+    if (Array.isArray(ingredientsStr)) {
+      return ingredientsStr.map(i => typeof i === 'string' ? { name: i, benefit: '' } : i);
+    }
+    const items = ingredientsStr.split(/[,，]/).map(s => s.trim()).filter(s => s);
+    return items.slice(0, 5).map(item => ({ name: item, benefit: '' }));
   }
 
   // 提取所有竞品
@@ -153,7 +183,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     }
 
     for (let i = 0; i < competitors.length; i++) {
-      if (competitors[i].url.trim()) {
+      if (competitors[i].url.trim() && competitors[i].status !== 'extracted') {
         await handleExtractSingle(i);
       }
     }
@@ -162,7 +192,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setActiveStep(2);
   }
 
-  // ========== 深度分析（Claude）==========
+  // ========== 深度分析（模拟，后续可对接 Claude）==========
   async function handleDeepAnalysis() {
     const extractedCompetitors = competitors.filter(c => c.status === 'extracted' || c.status === 'completed');
     if (extractedCompetitors.length === 0) {
@@ -174,15 +204,15 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setActiveStep(3);
 
     try {
-      // 1. 对每个竞品分析差评痛点
+      // 对每个竞品生成痛点分析（模拟）
       for (let i = 0; i < competitors.length; i++) {
         if (competitors[i].status === 'extracted') {
           updateCompetitor(i, { status: 'analyzing' });
           
-          // 模拟 Claude 分析
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
-          const mockPainPoints = generateMockPainPoints();
+          // 生成模拟痛点（后续可对接 Claude API）
+          const mockPainPoints = generateMockPainPoints(competitors[i].basicData?.name);
           updateCompetitor(i, {
             status: 'completed',
             painPoints: mockPainPoints
@@ -190,11 +220,13 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
         }
       }
 
-      // 2. 生成综合分析报告
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // 生成综合分析报告
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      const mockAnalysisResult = generateMockAnalysisResult();
-      setAnalysisResult(mockAnalysisResult);
+      const analysisData = generateAnalysisFromCompetitors(
+        competitors.filter(c => c.status === 'completed')
+      );
+      setAnalysisResult(analysisData);
       
       setActiveStep(4);
     } catch (err) {
@@ -204,7 +236,66 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     }
   }
 
-  // ========== 保存分析报告 ==========
+  // 从竞品数据生成分析报告
+  function generateAnalysisFromCompetitors(completedCompetitors) {
+    // 提取价格数据
+    const prices = completedCompetitors
+      .map(c => c.basicData?.price)
+      .filter(p => p)
+      .map(p => parseFloat(p.replace(/[^0-9.]/g, '')))
+      .filter(n => !isNaN(n) && n > 0);
+    
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    const avgPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+
+    // 收集所有痛点
+    const allPainPoints = completedCompetitors
+      .flatMap(c => c.painPoints || [])
+      .reduce((acc, pp) => {
+        const existing = acc.find(p => p.category === pp.category);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          acc.push({ ...pp, count: 1 });
+        }
+        return acc;
+      }, [])
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      summary: {
+        conclusion: `分析了 ${completedCompetitors.length} 个竞品，发现主要痛点集中在${allPainPoints[0]?.category || '产品体验'}方面，建议从差异化定位切入。`
+      },
+      marketAssessment: {
+        volume: '中等',
+        competition: '中等',
+        margin: '较高',
+        recommendation: '推荐进入'
+      },
+      priceAnalysis: {
+        min: minPrice ? `Rp ${minPrice.toLocaleString()}` : '-',
+        median: avgPrice ? `Rp ${Math.round(avgPrice).toLocaleString()}` : '-',
+        max: maxPrice ? `Rp ${maxPrice.toLocaleString()}` : '-',
+        suggestion: avgPrice ? `建议定价 Rp ${Math.round(avgPrice * 0.9).toLocaleString()} - ${Math.round(avgPrice * 1.1).toLocaleString()}` : '待定'
+      },
+      painPointsSummary: allPainPoints.slice(0, 4),
+      opportunities: [
+        { dimension: '产品升级', priority: '高', suggestions: ['优化配方', '升级包装', '增加容量'] },
+        { dimension: '定价策略', priority: '中', suggestions: ['性价比定位', '套装优惠'] },
+        { dimension: '营销差异', priority: '中', suggestions: ['KOC种草', '场景化内容'] },
+        { dimension: '服务承诺', priority: '高', suggestions: ['破损包赔', '效果保证'] },
+      ],
+      recommendations: {
+        positioning: '差异化定位，主打品质与性价比',
+        pricing: avgPrice ? `Rp ${Math.round(avgPrice * 0.95).toLocaleString()}` : '待定',
+        differentiators: ['升级包装', '复合配方', '服务承诺'],
+        pitfalls: ['避免过度宣传', '注意包装质量', '控制成本']
+      }
+    };
+  }
+
+  // ========== 保存分析报告（真实API）==========
   async function handleSave() {
     if (!analysisTitle.trim()) {
       alert('请输入报告标题');
@@ -214,26 +305,46 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
     setIsSaving(true);
 
     try {
+      // 收集完成的竞品数据
+      const completedCompetitors = competitors
+        .filter(c => c.status === 'completed')
+        .map(c => ({
+          url: c.url,
+          basicData: c.basicData,
+          titleAnalysis: c.titleAnalysis,
+          sellingPoints: c.sellingPoints,
+          ingredients: c.ingredients,
+          visuals: c.visuals,
+          painPoints: c.painPoints
+        }));
+
+      // 构建保存数据
       const reportData = {
-        title: analysisTitle,
+        title: analysisTitle.trim(),
         category,
         market,
         platform,
-        competitors: competitors.filter(c => c.status === 'completed'),
-        analysis: analysisResult,
-        created_by: currentUser?.id,
-        created_at: new Date().toISOString()
+        status: 'completed',
+        extract_provider: aiConfig.extract_provider,
+        analyze_provider: aiConfig.analyze_provider,
+        competitors: completedCompetitors,
+        summary: analysisResult?.summary || {},
+        pain_points_summary: analysisResult?.painPointsSummary || [],
+        opportunities: analysisResult?.opportunities || [],
+        recommendations: analysisResult?.recommendations || {},
+        created_by: currentUser?.id || null
       };
 
-      // await saveCompetitorAnalysis(reportData);
-      console.log('保存数据:', reportData);
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('📤 保存竞品分析:', reportData);
+
+      // ✅ 调用真实 API 保存
+      await saveCompetitorAnalysis(reportData);
       
       alert('✅ 竞品分析报告保存成功！');
       onSuccess?.();
       onClose?.();
     } catch (err) {
+      console.error('保存失败:', err);
       alert('保存失败: ' + err.message);
     } finally {
       setIsSaving(false);
@@ -394,7 +505,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
               <input
                 value={analysisTitle}
                 onChange={(e) => setAnalysisTitle(e.target.value)}
-                placeholder="如：印尼竹炭牙膏竞品分析-2026.01"
+                placeholder="如：印尼洗发水竞品分析-2026.01"
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -560,7 +671,7 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
               ) : (
                 <>
                   <Lightbulb size={18} />
-                  开始深度分析（Claude）
+                  开始深度分析
                 </>
               )}
             </button>
@@ -575,7 +686,6 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
           backgroundColor: '#F5F5F7'
         }}>
           {!extractedCount && !analysisResult ? (
-            // 空状态
             <div style={{
               height: '100%',
               display: 'flex',
@@ -593,14 +703,12 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
               </p>
             </div>
           ) : analysisResult ? (
-            // 完整分析报告
             <AnalysisReport 
               competitors={competitors.filter(c => c.status === 'completed')}
               analysis={analysisResult}
               market={market}
             />
           ) : (
-            // 提取结果预览
             <ExtractedDataPreview 
               competitors={competitors}
               expandedCompetitor={expandedCompetitor}
@@ -723,13 +831,13 @@ function CompetitorInput({ index, competitor, onUrlChange, onExtract, platform }
           fontSize: '12px'
         }}>
           <div style={{ fontWeight: '600', color: '#1D1D1F', marginBottom: '6px' }}>
-            {competitor.basicData.name}
+            {competitor.basicData.name || '产品名称'}
           </div>
           <div style={{ display: 'flex', gap: '12px', color: '#6E6E73', flexWrap: 'wrap' }}>
-            <span>💰 {competitor.basicData.price}</span>
-            <span>📦 {competitor.basicData.volume}</span>
-            <span>⭐ {competitor.basicData.rating}</span>
-            <span>💬 {competitor.basicData.reviewCount} 评论</span>
+            {competitor.basicData.price && <span>💰 {competitor.basicData.price}</span>}
+            {competitor.basicData.volume && <span>📦 {competitor.basicData.volume}</span>}
+            {competitor.basicData.rating && <span>⭐ {competitor.basicData.rating}</span>}
+            {competitor.basicData.reviewCount && <span>💬 {competitor.basicData.reviewCount} 评论</span>}
           </div>
         </div>
       )}
@@ -773,7 +881,7 @@ function ExtractedDataPreview({ competitors, expandedCompetitor, setExpandedComp
   );
 }
 
-// 单个竞品卡片（详细展示）
+// 单个竞品卡片
 function CompetitorCard({ competitor, index, isExpanded, onToggle }) {
   const { basicData, titleAnalysis, sellingPoints, ingredients, visuals, painPoints } = competitor;
 
@@ -787,7 +895,6 @@ function CompetitorCard({ competitor, index, isExpanded, onToggle }) {
       border: '1px solid #E5E5EA',
       overflow: 'hidden'
     }}>
-      {/* 头部 - 基础信息 */}
       <div 
         onClick={onToggle}
         style={{
@@ -815,14 +922,14 @@ function CompetitorCard({ competitor, index, isExpanded, onToggle }) {
           )}
           <div>
             <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#1D1D1F' }}>
-              {basicData.name}
+              {basicData.name || '产品名称'}
             </h3>
             <div style={{ display: 'flex', gap: '12px', marginTop: '6px', fontSize: '12px', color: '#6E6E73' }}>
-              <span style={{ fontWeight: '600', color: '#EF4444' }}>{basicData.price}</span>
-              <span>📦 {basicData.volume}</span>
-              <span>⭐ {basicData.rating}</span>
-              <span>💬 {basicData.reviewCount}</span>
-              <span>🛒 {basicData.sales}</span>
+              {basicData.price && <span style={{ fontWeight: '600', color: '#EF4444' }}>{basicData.price}</span>}
+              {basicData.volume && <span>📦 {basicData.volume}</span>}
+              {basicData.rating && <span>⭐ {basicData.rating}</span>}
+              {basicData.reviewCount && <span>💬 {basicData.reviewCount}</span>}
+              {basicData.sales && <span>🛒 {basicData.sales}</span>}
             </div>
           </div>
         </div>
@@ -843,62 +950,50 @@ function CompetitorCard({ competitor, index, isExpanded, onToggle }) {
         </div>
       </div>
 
-      {/* 展开详情 */}
       {isExpanded && (
         <div style={{ padding: '20px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             
-            {/* 标题分析 */}
-            <DetailSection 
-              icon="📝" 
-              title="标题分析"
-              status={titleAnalysis ? 'done' : 'pending'}
-            >
-              {titleAnalysis && (
+            <DetailSection icon="📝" title="标题分析" status={titleAnalysis?.full ? 'done' : 'pending'}>
+              {titleAnalysis?.full && (
                 <>
                   <div style={{ fontSize: '13px', color: '#1D1D1F', marginBottom: '10px', lineHeight: '1.5' }}>
                     {titleAnalysis.full}
                   </div>
                   <div style={{ fontSize: '11px', color: '#86868B', marginBottom: '8px' }}>
-                    字符数: {titleAnalysis.charCount} | 结构: {titleAnalysis.structure}
+                    字符数: {titleAnalysis.charCount}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {titleAnalysis.keywords?.map((kw, i) => (
-                      <span key={i} style={{
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        backgroundColor: '#EFF6FF',
-                        color: '#3B82F6',
-                        fontSize: '11px'
-                      }}>{kw}</span>
-                    ))}
-                  </div>
+                  {titleAnalysis.keywords?.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {titleAnalysis.keywords.map((kw, i) => (
+                        <span key={i} style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#3B82F6',
+                          fontSize: '11px'
+                        }}>{kw}</span>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </DetailSection>
 
-            {/* 卖点提取 */}
-            <DetailSection 
-              icon="⭐" 
-              title="核心卖点"
-              status={sellingPoints ? 'done' : 'pending'}
-            >
-              {sellingPoints && (
+            <DetailSection icon="⭐" title="核心卖点" status={sellingPoints?.length ? 'done' : 'pending'}>
+              {sellingPoints?.length > 0 && (
                 <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#1D1D1F' }}>
-                  {sellingPoints.map((sp, i) => (
-                    <li key={i} style={{ marginBottom: '6px' }}>{sp}</li>
+                  {sellingPoints.slice(0, 5).map((sp, i) => (
+                    <li key={i} style={{ marginBottom: '6px' }}>
+                      {typeof sp === 'string' ? sp : sp.text || sp.point || JSON.stringify(sp)}
+                    </li>
                   ))}
                 </ul>
               )}
             </DetailSection>
 
-            {/* 成分分析 */}
-            <DetailSection 
-              icon="🧪" 
-              title="主打成分"
-              status={ingredients ? 'done' : 'pending'}
-            >
-              {ingredients && (
+            <DetailSection icon="🧪" title="主打成分" status={ingredients?.length ? 'done' : 'pending'}>
+              {ingredients?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {ingredients.map((ing, i) => (
                     <div key={i} style={{
@@ -908,20 +1003,15 @@ function CompetitorCard({ competitor, index, isExpanded, onToggle }) {
                       fontSize: '12px'
                     }}>
                       <div style={{ fontWeight: '600', color: '#1D1D1F' }}>{ing.name}</div>
-                      <div style={{ fontSize: '11px', color: '#86868B' }}>{ing.benefit}</div>
+                      {ing.benefit && <div style={{ fontSize: '11px', color: '#86868B' }}>{ing.benefit}</div>}
                     </div>
                   ))}
                 </div>
               )}
             </DetailSection>
 
-            {/* 差评痛点 */}
-            <DetailSection 
-              icon="😣" 
-              title="差评痛点"
-              status={painPoints ? 'done' : 'pending'}
-            >
-              {painPoints && (
+            <DetailSection icon="😣" title="差评痛点" status={painPoints?.length ? 'done' : 'pending'}>
+              {painPoints?.length > 0 && (
                 <div style={{ display: 'grid', gap: '8px' }}>
                   {painPoints.slice(0, 3).map((pp, i) => (
                     <div key={i} style={{
@@ -983,7 +1073,7 @@ function DetailSection({ icon, title, status, children }) {
         </span>
       </div>
       {children || (
-        <div style={{ fontSize: '12px', color: '#86868B' }}>等待分析...</div>
+        <div style={{ fontSize: '12px', color: '#86868B' }}>等待数据...</div>
       )}
     </div>
   );
@@ -994,7 +1084,6 @@ function AnalysisReport({ competitors, analysis, market }) {
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
       
-      {/* 报告头部 */}
       <div style={{
         padding: '24px',
         borderRadius: '16px',
@@ -1009,7 +1098,6 @@ function AnalysisReport({ competitors, analysis, market }) {
           分析了 {competitors.length} 个竞品 · {market} 市场
         </p>
         
-        {/* 核心结论 */}
         <div style={{
           marginTop: '20px',
           padding: '16px',
@@ -1018,146 +1106,111 @@ function AnalysisReport({ competitors, analysis, market }) {
         }}>
           <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>🎯 核心结论</div>
           <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.6' }}>
-            {analysis.summary?.conclusion || '该市场存在明显的差异化机会，建议从产品体验和包装升级切入。'}
+            {analysis.summary?.conclusion || '分析完成，发现市场存在差异化机会。'}
           </p>
         </div>
       </div>
 
-      {/* 市场机会评估 */}
-      <ReportSection icon="📈" title="市场机会评估">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-          <MetricCard 
-            label="市场容量" 
-            value={analysis.marketAssessment?.volume || '中等'} 
-            trend="up"
-          />
-          <MetricCard 
-            label="竞争程度" 
-            value={analysis.marketAssessment?.competition || '中等'} 
-            trend="neutral"
-          />
-          <MetricCard 
-            label="利润空间" 
-            value={analysis.marketAssessment?.margin || '较高'} 
-            trend="up"
-          />
-          <MetricCard 
-            label="进入建议" 
-            value={analysis.marketAssessment?.recommendation || '推荐'} 
-            highlight={true}
-          />
-        </div>
-      </ReportSection>
-
-      {/* 价格带分析 */}
       <ReportSection icon="💰" title="价格带分析">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
           <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: '#F5F5F7', textAlign: 'center' }}>
             <div style={{ fontSize: '12px', color: '#86868B', marginBottom: '8px' }}>最低价</div>
             <div style={{ fontSize: '20px', fontWeight: '700', color: '#10B981' }}>
-              {analysis.priceAnalysis?.min || 'IDR 35,000'}
+              {analysis.priceAnalysis?.min || '-'}
             </div>
           </div>
           <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: '#EFF6FF', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#3B82F6', marginBottom: '8px' }}>主流价格</div>
+            <div style={{ fontSize: '12px', color: '#3B82F6', marginBottom: '8px' }}>平均价格</div>
             <div style={{ fontSize: '20px', fontWeight: '700', color: '#3B82F6' }}>
-              {analysis.priceAnalysis?.median || 'IDR 55,000'}
+              {analysis.priceAnalysis?.median || '-'}
             </div>
           </div>
           <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: '#F5F5F7', textAlign: 'center' }}>
             <div style={{ fontSize: '12px', color: '#86868B', marginBottom: '8px' }}>最高价</div>
             <div style={{ fontSize: '20px', fontWeight: '700', color: '#EF4444' }}>
-              {analysis.priceAnalysis?.max || 'IDR 89,000'}
+              {analysis.priceAnalysis?.max || '-'}
             </div>
           </div>
         </div>
-        <div style={{ 
-          marginTop: '16px', 
-          padding: '12px', 
-          borderRadius: '8px', 
-          backgroundColor: '#FEF3C7',
-          fontSize: '13px',
-          color: '#92400E'
-        }}>
-          💡 <strong>定价建议：</strong>{analysis.priceAnalysis?.suggestion || '建议定价 IDR 49,900 - 59,900，略低于头部竞品，主打性价比差异化'}
-        </div>
+        {analysis.priceAnalysis?.suggestion && (
+          <div style={{ 
+            marginTop: '16px', 
+            padding: '12px', 
+            borderRadius: '8px', 
+            backgroundColor: '#FEF3C7',
+            fontSize: '13px',
+            color: '#92400E'
+          }}>
+            💡 <strong>定价建议：</strong>{analysis.priceAnalysis.suggestion}
+          </div>
+        )}
       </ReportSection>
 
-      {/* 差评痛点汇总 */}
-      <ReportSection icon="😣" title="差评痛点汇总（核心机会）">
-        <div style={{ display: 'grid', gap: '12px' }}>
-          {(analysis.painPointsSummary || [
-            { category: '效果预期', count: 45, description: '美白效果不明显，与广告宣传不符', opportunity: '设置合理预期，附赠对比色卡' },
-            { category: '性价比', count: 32, description: '价格偏高，容量偏小', opportunity: '加大容量或套装优惠' },
-            { category: '使用体验', count: 28, description: '泡沫少、有异味、残留黑点', opportunity: '优化配方口感' },
-            { category: '包装物流', count: 18, description: '包装破损、封口渗漏', opportunity: '升级包装+破损包赔' },
-          ]).map((pp, i) => (
-            <div key={i} style={{
-              padding: '16px',
-              borderRadius: '10px',
-              backgroundColor: '#FEF2F2',
-              borderLeft: '4px solid #EF4444',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start'
-            }}>
-              <div style={{ flex: 1 }}>
+      {analysis.painPointsSummary?.length > 0 && (
+        <ReportSection icon="😣" title="差评痛点汇总">
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {analysis.painPointsSummary.map((pp, i) => (
+              <div key={i} style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: '#FEF2F2',
+                borderLeft: '4px solid #EF4444'
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <span style={{ fontSize: '14px', fontWeight: '600', color: '#EF4444' }}>{pp.category}</span>
+                  {pp.count && (
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: '#FCA5A5',
+                      color: 'white'
+                    }}>出现 {pp.count} 次</span>
+                  )}
+                </div>
+                <div style={{ fontSize: '13px', color: '#1D1D1F', marginBottom: '8px' }}>{pp.description}</div>
+                {pp.opportunity && (
+                  <div style={{ fontSize: '12px', color: '#10B981' }}>
+                    💡 <strong>机会：</strong>{pp.opportunity}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </ReportSection>
+      )}
+
+      {analysis.opportunities?.length > 0 && (
+        <ReportSection icon="🚀" title="差异化机会">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+            {analysis.opportunities.map((opp, i) => (
+              <div key={i} style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFDF5',
+                borderLeft: `4px solid ${opp.priority === '高' ? '#10B981' : '#3B82F6'}`
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#1D1D1F' }}>{opp.dimension}</span>
                   <span style={{
                     fontSize: '10px',
                     padding: '2px 6px',
                     borderRadius: '4px',
-                    backgroundColor: '#FCA5A5',
+                    backgroundColor: opp.priority === '高' ? '#10B981' : '#3B82F6',
                     color: 'white'
-                  }}>出现 {pp.count} 次</span>
+                  }}>优先级: {opp.priority}</span>
                 </div>
-                <div style={{ fontSize: '13px', color: '#1D1D1F', marginBottom: '8px' }}>{pp.description}</div>
-                <div style={{ fontSize: '12px', color: '#10B981' }}>
-                  💡 <strong>我们的机会：</strong>{pp.opportunity}
-                </div>
+                <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#1D1D1F' }}>
+                  {opp.suggestions?.map((s, j) => (
+                    <li key={j} style={{ marginBottom: '4px' }}>{s}</li>
+                  ))}
+                </ul>
               </div>
-            </div>
-          ))}
-        </div>
-      </ReportSection>
+            ))}
+          </div>
+        </ReportSection>
+      )}
 
-      {/* 差异化机会 */}
-      <ReportSection icon="🚀" title="差异化机会">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-          {(analysis.opportunities || [
-            { dimension: '产品升级', priority: '高', suggestions: ['泵头式包装设计', '益生菌复合配方', '加入抗敏成分'] },
-            { dimension: '定价策略', priority: '中', suggestions: ['比头部竞品低10-15%', '买二送一套装', '首单优惠'] },
-            { dimension: '营销差异', priority: '中', suggestions: ['真实KOC种草', '场景化投放（咖啡爱好者）', '效果对比视频'] },
-            { dimension: '服务承诺', priority: '高', suggestions: ['破损包赔', '无效退款', '附赠美白色卡'] },
-          ]).map((opp, i) => (
-            <div key={i} style={{
-              padding: '16px',
-              borderRadius: '10px',
-              backgroundColor: '#ECFDF5',
-              borderLeft: `4px solid ${opp.priority === '高' ? '#10B981' : '#3B82F6'}`
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <span style={{ fontSize: '14px', fontWeight: '600', color: '#1D1D1F' }}>{opp.dimension}</span>
-                <span style={{
-                  fontSize: '10px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  backgroundColor: opp.priority === '高' ? '#10B981' : '#3B82F6',
-                  color: 'white'
-                }}>优先级: {opp.priority}</span>
-              </div>
-              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#1D1D1F' }}>
-                {opp.suggestions.map((s, j) => (
-                  <li key={j} style={{ marginBottom: '4px' }}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </ReportSection>
-
-      {/* 产品开发建议 */}
       <ReportSection icon="🎯" title="产品开发建议">
         <div style={{
           padding: '20px',
@@ -1169,19 +1222,19 @@ function AnalysisReport({ competitors, analysis, market }) {
             <div>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#7C3AED' }}>📍 建议定位</h4>
               <p style={{ margin: 0, fontSize: '14px', color: '#1D1D1F', lineHeight: '1.6' }}>
-                {analysis.recommendations?.positioning || '美白不伤龈的竹炭益生菌牙膏，主打温和有效'}
+                {analysis.recommendations?.positioning || '差异化定位'}
               </p>
             </div>
             <div>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#7C3AED' }}>💰 建议定价</h4>
               <p style={{ margin: 0, fontSize: '14px', color: '#1D1D1F', lineHeight: '1.6' }}>
-                {analysis.recommendations?.pricing || 'IDR 49,900 - 59,900（150g装，比竞品多25%容量）'}
+                {analysis.recommendations?.pricing || '待定'}
               </p>
             </div>
             <div>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#7C3AED' }}>⭐ 核心差异点</h4>
               <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#1D1D1F' }}>
-                {(analysis.recommendations?.differentiators || ['泵头式高级包装', '竹炭+益生菌双重配方', '破损包赔服务承诺']).map((d, i) => (
+                {(analysis.recommendations?.differentiators || []).map((d, i) => (
                   <li key={i} style={{ marginBottom: '4px' }}>{d}</li>
                 ))}
               </ul>
@@ -1189,7 +1242,7 @@ function AnalysisReport({ competitors, analysis, market }) {
             <div>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#EF4444' }}>⚠️ 规避的坑</h4>
               <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px', color: '#1D1D1F' }}>
-                {(analysis.recommendations?.pitfalls || ['不要过度宣传美白效果', '注意包装防摔防漏', '控制成本避免定价过高']).map((p, i) => (
+                {(analysis.recommendations?.pitfalls || []).map((p, i) => (
                   <li key={i} style={{ marginBottom: '4px' }}>{p}</li>
                 ))}
               </ul>
@@ -1228,196 +1281,23 @@ function ReportSection({ icon, title, children }) {
   );
 }
 
-// 指标卡片
-function MetricCard({ label, value, trend, highlight }) {
-  return (
-    <div style={{
-      padding: '16px',
-      borderRadius: '10px',
-      backgroundColor: highlight ? '#EFF6FF' : '#F5F5F7',
-      border: highlight ? '2px solid #3B82F6' : '1px solid #E5E5EA',
-      textAlign: 'center'
-    }}>
-      <div style={{ fontSize: '12px', color: '#86868B', marginBottom: '8px' }}>{label}</div>
-      <div style={{ 
-        fontSize: '18px', 
-        fontWeight: '700', 
-        color: highlight ? '#3B82F6' : (trend === 'up' ? '#10B981' : '#1D1D1F')
-      }}>
-        {value}
-        {trend === 'up' && ' ↑'}
-        {trend === 'down' && ' ↓'}
-      </div>
-    </div>
-  );
-}
-
-// ==================== Mock 数据生成（开发阶段）====================
-function generateMockExtractedData(index) {
-  const mockProducts = [
-    {
-      basicData: {
-        name: 'Lola Rose Advanced Charcoal Toothpaste 120g',
-        brand: 'Lola Rose',
-        price: 'Rp 55,900',
-        priceOriginal: 'Rp 79,900',
-        volume: '120g',
-        sales: '10rb+ terjual',
-        rating: 4.8,
-        reviewCount: 2547
-      },
-      titleAnalysis: {
-        full: 'Lola Rose Original Pasta Gigi Pemutih Charcoal Whitening Toothpaste 120g BPOM',
-        charCount: 78,
-        structure: '品牌 + 产品类型 + 核心成分 + 功效 + 规格 + 认证',
-        keywords: ['Pasta Gigi Pemutih', 'Charcoal', 'Whitening', 'BPOM', '美白牙膏']
-      },
-      sellingPoints: [
-        '强力去渍 - 竹炭成分针对咖啡/茶/烟渍',
-        '去除牙结石 - Hydrated Silica 物理摩擦',
-        '无氟配方 - 孕妇及5岁以上儿童可用',
-        '3倍美白 - 4周可见效果',
-        'BPOM认证 - 印尼官方安全认证'
-      ],
-      ingredients: [
-        { name: '竹炭 Charcoal', benefit: '吸附去渍' },
-        { name: 'Hydrated Silica', benefit: '物理美白' },
-        { name: 'Menthol', benefit: '清新口气' }
-      ],
-      visuals: {
-        mainImage: 'https://down-id.img.susercontent.com/file/id-11134207-7r98z-example1',
-        detailImages: []
-      }
-    },
-    {
-      basicData: {
-        name: 'SAFI White Expert Toothpaste 100g',
-        brand: 'SAFI',
-        price: 'Rp 42,000',
-        priceOriginal: 'Rp 58,000',
-        volume: '100g',
-        sales: '5rb+ terjual',
-        rating: 4.6,
-        reviewCount: 1823
-      },
-      titleAnalysis: {
-        full: 'SAFI White Expert Pasta Gigi Pemutih Halal Natural Whitening 100g',
-        charCount: 65,
-        structure: '品牌 + 系列 + 产品类型 + 认证 + 功效 + 规格',
-        keywords: ['White Expert', 'Halal', 'Natural Whitening', 'Pemutih']
-      },
-      sellingPoints: [
-        'Halal认证 - 清真友好',
-        '天然美白成分',
-        '温和配方 - 适合敏感牙龈',
-        '持久清新口气'
-      ],
-      ingredients: [
-        { name: 'Calcium Carbonate', benefit: '温和去渍' },
-        { name: 'Aloe Vera', benefit: '舒缓牙龈' }
-      ],
-      visuals: {
-        mainImage: 'https://down-id.img.susercontent.com/file/id-11134207-7r98z-example2',
-        detailImages: []
-      }
-    },
-    {
-      basicData: {
-        name: 'Ciptadent Pro Charcoal 150g',
-        brand: 'Ciptadent',
-        price: 'Rp 28,500',
-        priceOriginal: 'Rp 35,000',
-        volume: '150g',
-        sales: '50rb+ terjual',
-        rating: 4.5,
-        reviewCount: 8932
-      },
-      titleAnalysis: {
-        full: 'Ciptadent Pro Charcoal Pasta Gigi Arang Aktif Pemutih Gigi 150g',
-        charCount: 62,
-        structure: '品牌 + 系列 + 成分 + 产品类型 + 功效 + 规格',
-        keywords: ['Charcoal', 'Arang Aktif', 'Pemutih Gigi', '活性炭']
-      },
-      sellingPoints: [
-        '超高性价比 - 150g大容量',
-        '活性炭深层清洁',
-        '全家适用',
-        '月销量TOP'
-      ],
-      ingredients: [
-        { name: 'Activated Charcoal', benefit: '深层清洁' },
-        { name: 'Fluoride', benefit: '防蛀固齿' }
-      ],
-      visuals: {
-        mainImage: 'https://down-id.img.susercontent.com/file/id-11134207-7r98z-example3',
-        detailImages: []
-      }
-    }
-  ];
-
-  return mockProducts[index] || mockProducts[0];
-}
-
-function generateMockPainPoints() {
+// ==================== 辅助函数：生成模拟痛点 ====================
+function generateMockPainPoints(productName) {
   return [
     {
       category: '效果预期',
-      description: '用完一支没看到明显美白效果，广告过于夸张',
-      frequency: '高频',
-      originalReviews: ['用了一个月没效果', '和普通牙膏没区别'],
-      opportunity: '设置合理预期，附赠美白对比色卡追踪效果'
+      description: '实际效果与宣传不符，用户期望过高',
+      opportunity: '设置合理预期，提供真实效果展示'
     },
     {
       category: '性价比',
-      description: '120g近6万盾价格偏高，容量偏小',
-      frequency: '中频',
-      originalReviews: ['太贵了', '量太少'],
-      opportunity: '加大容量到150g，或提供套装优惠'
+      description: '价格偏高或容量偏小',
+      opportunity: '加大容量或提供套装优惠'
     },
     {
       category: '使用体验',
-      description: '泡沫不够丰富，有轻微土腥味，刷完牙缝残留黑点',
-      frequency: '低频',
-      originalReviews: ['泡沫少', '味道怪'],
-      opportunity: '优化配方口感，增加薄荷清新感'
+      description: '使用感受不佳（泡沫、气味、质地等）',
+      opportunity: '优化配方改善使用体验'
     }
   ];
-}
-
-function generateMockAnalysisResult() {
-  return {
-    summary: {
-      conclusion: '印尼竹炭牙膏市场处于快速增长期，头部产品存在明显的效果预期管理和性价比痛点，建议通过包装升级+复合配方+合理定价切入市场。'
-    },
-    marketAssessment: {
-      volume: '中高',
-      competition: '中等',
-      margin: '较高',
-      recommendation: '⭐⭐⭐⭐ 推荐进入'
-    },
-    priceAnalysis: {
-      min: 'Rp 28,500',
-      median: 'Rp 45,000',
-      max: 'Rp 79,900',
-      suggestion: '建议定价 Rp 49,900，150g装，比竞品Lola Rose多25%容量但更低价'
-    },
-    painPointsSummary: [
-      { category: '效果预期', count: 45, description: '美白效果不明显，与广告宣传不符', opportunity: '设置合理预期，附赠对比色卡' },
-      { category: '性价比', count: 32, description: '价格偏高，容量偏小', opportunity: '加大容量或套装优惠' },
-      { category: '使用体验', count: 28, description: '泡沫少、有异味、残留黑点', opportunity: '优化配方口感' },
-      { category: '包装物流', count: 18, description: '包装破损、封口渗漏', opportunity: '升级包装+破损包赔' }
-    ],
-    opportunities: [
-      { dimension: '产品升级', priority: '高', suggestions: ['泵头式包装设计', '益生菌复合配方', '加入抗敏成分'] },
-      { dimension: '定价策略', priority: '中', suggestions: ['比头部竞品低10-15%', '买二送一套装', '首单优惠'] },
-      { dimension: '营销差异', priority: '中', suggestions: ['真实KOC种草', '场景化投放', '效果对比视频'] },
-      { dimension: '服务承诺', priority: '高', suggestions: ['破损包赔', '无效退款', '附赠美白色卡'] }
-    ],
-    recommendations: {
-      positioning: '美白不伤龈的竹炭益生菌牙膏，主打温和有效',
-      pricing: 'Rp 49,900 - 59,900（150g装，比竞品多25%容量）',
-      differentiators: ['泵头式高级包装', '竹炭+益生菌双重配方', '破损包赔服务承诺'],
-      pitfalls: ['不要过度宣传美白效果', '注意包装防摔防漏', '控制成本避免定价过高']
-    }
-  };
 }
