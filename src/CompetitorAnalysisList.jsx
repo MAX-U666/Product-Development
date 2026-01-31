@@ -1,4 +1,4 @@
-// src/CompetitorAnalysisList.jsx
+// src/CompetitorAnalysisList.jsx1
 // 竞品分析库 - 列表页面（使用真实API）
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Eye, Trash2, ArrowRight, Filter } from 'lucide-react';
