@@ -1,8 +1,9 @@
 // src/ProductFormAI.jsx
 // AI 智能创建产品 - 主组件（精简版）
 // 2026-01-31 重构：拆分为多个子组件
-import React, { useState, useRef } from 'react';
-import { X } from 'lucide-react';
+// 2026-01-31 更新：集成竞品分析数据
+import React, { useState, useRef, useEffect } from 'react';
+import { X, ChevronDown, ChevronUp, Check, AlertTriangle, Lightbulb, Target } from 'lucide-react';
 import { extractCompetitorInfo, generateProductPlan, insertAIDraft } from './api';
 import { getCurrentBeijingISO } from './timeConfig';
 
@@ -33,10 +34,16 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
     conceptIngredient: '',
     volume: '',
     pricing: '',
-    category: preSelectedAnalysis?.category || 'Shampoo',
-    market: preSelectedAnalysis?.market || 'Indonesia',
-    platform: preSelectedAnalysis?.platform || 'Shopee'
+    category: 'Shampoo',
+    market: 'Indonesia',
+    platform: 'Shopee'
   });
+
+  // ========== 竞品分析状态 ==========
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(!!preSelectedAnalysis);
+  const [selectedPainPoints, setSelectedPainPoints] = useState([]);
+  const [selectedOpportunities, setSelectedOpportunities] = useState([]);
+  const [useAnalysisData, setUseAnalysisData] = useState(!!preSelectedAnalysis);
 
   // ========== 竞品状态 ==========
   const [competitors, setCompetitors] = useState([
@@ -60,6 +67,31 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
   // ========== 保存状态 ==========
   const [isSaving, setIsSaving] = useState(false);
 
+  // ========== 初始化：从竞品分析预填充 ==========
+  useEffect(() => {
+    if (preSelectedAnalysis) {
+      // 预填充表单数据
+      setFormData(prev => ({
+        ...prev,
+        category: preSelectedAnalysis.category || prev.category,
+        market: preSelectedAnalysis.market || prev.market,
+        platform: preSelectedAnalysis.platform || prev.platform,
+        // 如果有定价建议，预填充
+        pricing: preSelectedAnalysis.recommendations?.pricing || prev.pricing
+      }));
+
+      // 默认选中所有痛点和机会
+      const painPoints = preSelectedAnalysis.pain_points_summary || [];
+      const opportunities = preSelectedAnalysis.opportunities || [];
+      
+      setSelectedPainPoints(painPoints.map((_, i) => i));
+      setSelectedOpportunities(opportunities.map((_, i) => i));
+      
+      setShowAnalysisPanel(true);
+      setUseAnalysisData(true);
+    }
+  }, [preSelectedAnalysis]);
+
   // ========== 辅助函数 ==========
   const updateCompetitor = (index, updates) => {
     setCompetitors(prev => prev.map((c, i) => i === index ? { ...c, ...updates } : c));
@@ -67,6 +99,24 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
 
   const updateModuleStatus = (moduleId, status) => {
     setModuleStatus(prev => ({ ...prev, [moduleId]: status }));
+  };
+
+  // 切换痛点选择
+  const togglePainPoint = (index) => {
+    setSelectedPainPoints(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
+  // 切换机会选择
+  const toggleOpportunity = (index) => {
+    setSelectedOpportunities(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
   };
 
   // ========== 竞品提取 ==========
@@ -86,7 +136,6 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
       updateCompetitor(index, { loading: true, error: '', success: false, data: null });
 
       try {
-        // 不要截断 URL，保持完整链接
         const cleanUrl = comp.url.trim();
 
         const result = await withTimeout(
@@ -160,8 +209,10 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
   // ========== 生成产品方案 ==========
   const handleGenerate = async () => {
     const hasCompetitorData = competitors.some(c => c.success && c.data);
-    if (!hasCompetitorData) {
-      alert('请至少提取1条竞品数据');
+    const hasAnalysisData = useAnalysisData && preSelectedAnalysis;
+    
+    if (!hasCompetitorData && !hasAnalysisData) {
+      alert('请至少提取1条竞品数据，或使用竞品分析报告');
       return;
     }
 
@@ -169,6 +220,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
     setGenerateError('');
 
     try {
+      // 收集竞品数据
       const competitorsData = competitors
         .filter(c => c.success && c.data)
         .map(c => ({
@@ -179,6 +231,26 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
           benefits: c.data.sellingPoints || c.data.benefits || [],
           source_url: c.url || ''
         }));
+
+      // ✅ 收集竞品分析数据
+      let analysisContext = null;
+      if (useAnalysisData && preSelectedAnalysis) {
+        const painPoints = preSelectedAnalysis.pain_points_summary || [];
+        const opportunities = preSelectedAnalysis.opportunities || [];
+        
+        analysisContext = {
+          title: preSelectedAnalysis.title,
+          summary: preSelectedAnalysis.summary?.conclusion || '',
+          // 只包含选中的痛点
+          painPoints: selectedPainPoints.map(i => painPoints[i]).filter(Boolean),
+          // 只包含选中的机会
+          opportunities: selectedOpportunities.map(i => opportunities[i]).filter(Boolean),
+          // 产品建议
+          recommendations: preSelectedAnalysis.recommendations || {},
+          // 竞品分析中的竞品数据
+          analysisCompetitors: preSelectedAnalysis.competitors || []
+        };
+      }
 
       const payload = {
         brandName: formData.brandName,
@@ -191,7 +263,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
         market: formData.market,
         platform: formData.platform,
         competitors: competitorsData,
-        ai_config: aiConfig
+        ai_config: aiConfig,
+        // ✅ 新增：竞品分析上下文
+        analysis_context: analysisContext
       };
 
       console.log('📤 发送生成请求:', payload);
@@ -230,6 +304,11 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
     try {
       const draftData = prepareDraftData(generatedData, formData, competitors, aiConfig, currentUser);
       draftData.created_at = getCurrentBeijingISO();
+      
+      // ✅ 新增：关联竞品分析ID
+      if (preSelectedAnalysis?.id) {
+        draftData.from_analysis_id = preSelectedAnalysis.id;
+      }
 
       await insertAIDraft(draftData);
       
@@ -254,6 +333,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
 
   // 计算已提取竞品数量
   const extractedCount = competitors.filter(c => c.success).length;
+  
+  // 是否可以生成（有竞品数据或有分析数据）
+  const canGenerate = extractedCount > 0 || (useAnalysisData && preSelectedAnalysis);
 
   // ==================== 主渲染 ====================
   return (
@@ -292,7 +374,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
           <div>
             <h1 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>AI 智能创建产品</h1>
             <p style={{ margin: 0, fontSize: '11px', color: '#86868b' }}>
-              9模块产品方案生成 · AI驱动
+              {preSelectedAnalysis 
+                ? `📊 基于「${preSelectedAnalysis.title}」创建` 
+                : '9模块产品方案生成 · AI驱动'}
             </p>
           </div>
         </div>
@@ -363,7 +447,7 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
       <div style={{ display: 'flex', height: 'calc(100vh - 69px)' }}>
         {/* Left Panel - 输入区 */}
         <div style={{
-          width: '400px',
+          width: '420px',
           borderRight: '1px solid #e5e5ea',
           padding: '20px',
           overflowY: 'auto',
@@ -372,6 +456,21 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
           <h2 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '16px', color: '#ea580c' }}>
             📝 输入信息
           </h2>
+
+          {/* ✅ 新增：竞品分析参考面板 */}
+          {preSelectedAnalysis && (
+            <AnalysisReferencePanel
+              analysis={preSelectedAnalysis}
+              isExpanded={showAnalysisPanel}
+              onToggle={() => setShowAnalysisPanel(!showAnalysisPanel)}
+              useAnalysisData={useAnalysisData}
+              onToggleUse={() => setUseAnalysisData(!useAnalysisData)}
+              selectedPainPoints={selectedPainPoints}
+              selectedOpportunities={selectedOpportunities}
+              onTogglePainPoint={togglePainPoint}
+              onToggleOpportunity={toggleOpportunity}
+            />
+          )}
 
           {/* AI 模型选择 */}
           <AIConfigPanel aiConfig={aiConfig} onChange={setAiConfig} />
@@ -391,11 +490,11 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
             borderRadius: '10px',
             backgroundColor: '#FFFFFF',
             marginBottom: '16px',
-            border: '1px solid #f97316'
+            border: useAnalysisData && preSelectedAnalysis ? '1px solid #e5e5ea' : '1px solid #f97316'
           }}>
             <div style={{ 
               fontSize: '11px', 
-              color: '#ea580c', 
+              color: useAnalysisData && preSelectedAnalysis ? '#86868b' : '#ea580c', 
               marginBottom: '12px', 
               fontWeight: '600', 
               textTransform: 'uppercase', 
@@ -404,14 +503,24 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
               alignItems: 'center',
               gap: '6px'
             }}>
-              🔗 竞品采集（必填）
-              <span style={{
-                fontSize: '10px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                backgroundColor: '#fff7ed',
-                color: '#ea580c'
-              }}>至少1条 · 已提取{extractedCount}条</span>
+              🔗 竞品采集
+              {useAnalysisData && preSelectedAnalysis ? (
+                <span style={{
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: '#f0fdf4',
+                  color: '#10b981'
+                }}>可选 · 已有分析数据</span>
+              ) : (
+                <span style={{
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: '#fff7ed',
+                  color: '#ea580c'
+                }}>必填 · 已提取{extractedCount}条</span>
+              )}
             </div>
             
             {competitors.map((comp, index) => (
@@ -451,19 +560,19 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
           {/* 生成按钮 */}
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || extractedCount === 0}
+            disabled={isGenerating || !canGenerate}
             style={{
               width: '100%',
               padding: '14px',
               borderRadius: '10px',
               border: 'none',
-              background: (isGenerating || extractedCount === 0) 
+              background: (isGenerating || !canGenerate) 
                 ? '#d2d2d7' 
                 : 'linear-gradient(135deg, #f97316, #fb923c)',
               color: 'white',
               fontSize: '15px',
               fontWeight: '600',
-              cursor: (isGenerating || extractedCount === 0) ? 'not-allowed' : 'pointer',
+              cursor: (isGenerating || !canGenerate) ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -473,9 +582,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
             {isGenerating ? '⚙️ AI 生成中...' : '🚀 生成产品方案'}
           </button>
           
-          {extractedCount === 0 && (
+          {!canGenerate && (
             <p style={{ fontSize: '11px', color: '#86868b', textAlign: 'center', marginTop: '8px' }}>
-              请先提取至少1条竞品数据
+              请先提取竞品数据或启用竞品分析参考
             </p>
           )}
 
@@ -512,7 +621,9 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
               <div style={{ fontSize: '72px', marginBottom: '16px', opacity: 0.3 }}>🧪</div>
               <p style={{ fontSize: '16px', fontWeight: '500', color: '#6e6e73' }}>填写左侧信息后点击生成</p>
               <p style={{ fontSize: '13px', marginTop: '8px' }}>
-                AI 将基于竞品分析 + 手动输入生成完整产品方案
+                {preSelectedAnalysis 
+                  ? 'AI 将基于竞品分析报告 + 竞品数据生成完整产品方案'
+                  : 'AI 将基于竞品分析 + 手动输入生成完整产品方案'}
               </p>
             </div>
           ) : (
@@ -553,5 +664,283 @@ const ProductFormAI = ({ onClose, onSuccess, currentUser, preSelectedAnalysis })
     </div>
   );
 };
+
+// ==================== 竞品分析参考面板 ====================
+function AnalysisReferencePanel({
+  analysis,
+  isExpanded,
+  onToggle,
+  useAnalysisData,
+  onToggleUse,
+  selectedPainPoints,
+  selectedOpportunities,
+  onTogglePainPoint,
+  onToggleOpportunity
+}) {
+  const painPoints = analysis.pain_points_summary || [];
+  const opportunities = analysis.opportunities || [];
+  const recommendations = analysis.recommendations || {};
+  const competitors = analysis.competitors || [];
+
+  return (
+    <div style={{
+      padding: '16px',
+      borderRadius: '10px',
+      backgroundColor: '#FFFFFF',
+      marginBottom: '16px',
+      border: useAnalysisData ? '2px solid #8B5CF6' : '1px solid #e5e5ea'
+    }}>
+      {/* 头部 */}
+      <div 
+        onClick={onToggle}
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          cursor: 'pointer',
+          marginBottom: isExpanded ? '12px' : 0
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '16px' }}>📊</span>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#1d1d1f' }}>
+              竞品分析参考
+            </div>
+            <div style={{ fontSize: '10px', color: '#86868b' }}>
+              {analysis.title}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* 启用开关 */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleUse(); }}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '12px',
+              border: 'none',
+              backgroundColor: useAnalysisData ? '#8B5CF6' : '#e5e5ea',
+              color: useAnalysisData ? 'white' : '#86868b',
+              fontSize: '10px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {useAnalysisData ? <Check size={12} /> : null}
+            {useAnalysisData ? '已启用' : '未启用'}
+          </button>
+          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
+      </div>
+
+      {/* 展开内容 */}
+      {isExpanded && (
+        <div style={{ fontSize: '12px' }}>
+          {/* 核心结论 */}
+          {analysis.summary?.conclusion && (
+            <div style={{
+              padding: '10px',
+              borderRadius: '6px',
+              backgroundColor: '#F5F3FF',
+              marginBottom: '12px'
+            }}>
+              <div style={{ fontWeight: '600', color: '#7C3AED', marginBottom: '4px', fontSize: '11px' }}>
+                🎯 核心结论
+              </div>
+              <div style={{ color: '#1d1d1f', lineHeight: '1.5' }}>
+                {analysis.summary.conclusion}
+              </div>
+            </div>
+          )}
+
+          {/* 竞品列表 */}
+          {competitors.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontWeight: '600', color: '#6e6e73', marginBottom: '6px', fontSize: '11px' }}>
+                📦 分析的竞品 ({competitors.length}个)
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {competitors.slice(0, 3).map((comp, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: '#f0f9ff',
+                      color: '#0369a1',
+                      fontSize: '10px'
+                    }}
+                  >
+                    {comp.basicData?.name || comp.name || `竞品${i + 1}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 痛点选择 */}
+          {painPoints.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ 
+                fontWeight: '600', 
+                color: '#DC2626', 
+                marginBottom: '6px', 
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <AlertTriangle size={12} />
+                差评痛点（点击选择要参考的）
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {painPoints.map((point, i) => (
+                  <div
+                    key={i}
+                    onClick={() => onTogglePainPoint(i)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: selectedPainPoints.includes(i) ? '#FEF2F2' : '#f9fafb',
+                      border: selectedPainPoints.includes(i) ? '1px solid #FECACA' : '1px solid #e5e5ea',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '4px',
+                      border: selectedPainPoints.includes(i) ? 'none' : '1px solid #d1d5db',
+                      backgroundColor: selectedPainPoints.includes(i) ? '#DC2626' : 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: '1px'
+                    }}>
+                      {selectedPainPoints.includes(i) && <Check size={10} color="white" />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', color: '#DC2626', fontSize: '11px' }}>
+                        {point.category}
+                      </div>
+                      <div style={{ color: '#6e6e73', fontSize: '10px', marginTop: '2px' }}>
+                        {point.description}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 差异化机会选择 */}
+          {opportunities.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ 
+                fontWeight: '600', 
+                color: '#059669', 
+                marginBottom: '6px', 
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <Lightbulb size={12} />
+                差异化机会（点击选择要采纳的）
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {opportunities.map((opp, i) => (
+                  <div
+                    key={i}
+                    onClick={() => onToggleOpportunity(i)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: selectedOpportunities.includes(i) ? '#ECFDF5' : '#f9fafb',
+                      border: selectedOpportunities.includes(i) ? '1px solid #A7F3D0' : '1px solid #e5e5ea',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '4px',
+                      border: selectedOpportunities.includes(i) ? 'none' : '1px solid #d1d5db',
+                      backgroundColor: selectedOpportunities.includes(i) ? '#059669' : 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: '1px'
+                    }}>
+                      {selectedOpportunities.includes(i) && <Check size={10} color="white" />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', color: '#059669', fontSize: '11px' }}>
+                        {opp.dimension}
+                      </div>
+                      <div style={{ color: '#6e6e73', fontSize: '10px', marginTop: '2px' }}>
+                        {opp.suggestion || (opp.suggestions && opp.suggestions.join(', '))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 建议定位 */}
+          {recommendations.positioning && (
+            <div style={{
+              padding: '10px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF3C7',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
+            }}>
+              <Target size={14} style={{ color: '#D97706', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <div style={{ fontWeight: '600', color: '#D97706', fontSize: '11px' }}>建议定位</div>
+                <div style={{ color: '#92400E', fontSize: '11px', marginTop: '2px' }}>
+                  {recommendations.positioning}
+                </div>
+                {recommendations.pricing && (
+                  <div style={{ color: '#92400E', fontSize: '11px', marginTop: '4px' }}>
+                    💰 建议定价: {recommendations.pricing}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 统计 */}
+          <div style={{
+            marginTop: '12px',
+            padding: '8px',
+            borderRadius: '6px',
+            backgroundColor: '#f9fafb',
+            fontSize: '10px',
+            color: '#86868b',
+            textAlign: 'center'
+          }}>
+            已选择 {selectedPainPoints.length} 个痛点 · {selectedOpportunities.length} 个机会
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default ProductFormAI;
