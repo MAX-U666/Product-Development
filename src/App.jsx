@@ -1,13 +1,13 @@
 // File: src/App.jsx
-// ✅ 2026-01-29 更新：添加 SKU 列显示
-// - 👁 快速预览 AI草稿 + 开发瓶型/参考图（不影响原审核/接单功能）
-// - 引入 DraftReviewModal + fetchAIDraftById
-// - 新增 quickPreview 的 3 个 state + openQuickPreview 方法 + 底部 Modal 渲染
-// - ✅ 新增 SKU 列
+// ✅ 2026-01-31 更新：添加竞品分析模块
+// - 新增 CompetitorAnalysis 竞品分析创建页面
+// - 新增 CompetitorAnalysisList 竞品分析列表页面
+// - 新增 📊 竞品分析 Tab
+// - 支持从竞品分析跳转到 AI 创建产品
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Package, LogOut, Plus, Eye, Trash2, Sparkles, ChevronDown } from 'lucide-react'
-import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api' // ✅ +fetchAIDraftById
+import { fetchData, deleteData, fetchAIDrafts, fetchAIDraftById } from './api'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import ProductForm from './ProductForm'
@@ -17,10 +17,12 @@ import DesignerDashboard from './DesignerDashboard'
 import ContentDashboard from './ContentDashboard'
 import AIDraftDashboard from './AIDraftDashboard'
 import ProductDevEdit from './ProductDevEdit'
-import DraftReviewModal from './DraftReviewModal' // ✅ 新增：快速预览弹窗
-
-// ✅ 用户管理页（你需要新建 src/UserManagement.jsx）
+import DraftReviewModal from './DraftReviewModal'
 import UserManagement from './UserManagement'
+
+// ✅ 新增：竞品分析模块
+import CompetitorAnalysis from './CompetitorAnalysis'
+import CompetitorAnalysisList from './CompetitorAnalysisList'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -30,19 +32,23 @@ export default function App() {
   const [showProductForm, setShowProductForm] = useState(false)
   const [showProductFormAI, setShowProductFormAI] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
-  const [selectedDevProduct, setSelectedDevProduct] = useState(null) // ✅ 产品开发编辑
+  const [selectedDevProduct, setSelectedDevProduct] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const [pendingDraftsCount, setPendingDraftsCount] = useState(0)
 
-  // ✅ 新增：快速预览（AI草稿 + 开发素材）
+  // 快速预览（AI草稿 + 开发素材）
   const [quickPreviewOpen, setQuickPreviewOpen] = useState(false)
   const [quickPreviewDraft, setQuickPreviewDraft] = useState(null)
   const [quickPreviewProduct, setQuickPreviewProduct] = useState(null)
 
-  // ✅ 管理员下拉菜单
+  // 管理员下拉菜单
   const [showAdminMenu, setShowAdminMenu] = useState(false)
   const adminMenuRef = useRef(null)
+
+  // ✅ 新增：竞品分析相关状态
+  const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState(false)
+  const [selectedAnalysisForProduct, setSelectedAnalysisForProduct] = useState(null)
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser')
@@ -67,7 +73,7 @@ export default function App() {
     loadData()
   }, [])
 
-  // ✅ 点击空白关闭管理员菜单
+  // 点击空白关闭管理员菜单
   useEffect(() => {
     function onDocClick(e) {
       if (!showAdminMenu) return
@@ -152,9 +158,9 @@ export default function App() {
     await loadPendingDraftsCount()
   }
 
-  // ✅ 新增：点👁 快速预览（优先弹 AI 草稿 + 开发素材）
+  // 点👁 快速预览（优先弹 AI 草稿 + 开发素材）
   async function openQuickPreview(product) {
-    // ✅ 二次审核（开发素材复审）时：直接打开【产品详情】让管理员点"通过/驳回"
+    // 二次审核（开发素材复审）时：直接打开【产品详情】让管理员点"通过/驳回"
     if (
       product?.stage === 1 &&
       (product?.dev_assets_status === "待复审" || product?.status === "待管理员复审")
@@ -165,7 +171,6 @@ export default function App() {
 
     const draftId = product?.created_from_draft_id
     if (!draftId) {
-      // 没有草稿ID：保持你原来的行为
       setSelectedProduct(product)
       return
     }
@@ -245,7 +250,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* ✅ 管理员下拉入口（只管理员看得到） */}
+              {/* 管理员下拉入口（只管理员看得到） */}
               {isAdmin && (
                 <div className="relative" ref={adminMenuRef}>
                   <button
@@ -345,6 +350,20 @@ export default function App() {
             </button>
           )}
 
+          {/* ✅ 新增：竞品分析 Tab */}
+          {canDev && (
+            <button
+              onClick={() => setActiveTab('competitor_analysis')}
+              className={`px-4 py-3 border-b-2 transition-colors ${
+                activeTab === 'competitor_analysis'
+                  ? 'border-blue-600 text-blue-600 font-medium'
+                  : 'border-transparent text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              📊 竞品分析
+            </button>
+          )}
+
           {canDev && (
             <button
               onClick={() => setActiveTab('ai_drafts')}
@@ -404,7 +423,6 @@ export default function App() {
                 <table className="w-full">
                   <thead className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
                     <tr>
-                      {/* ✅ 新增 SKU 列 */}
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase">SKU</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase">产品名称</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase">月份</th>
@@ -434,7 +452,6 @@ export default function App() {
 
                       return (
                         <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                          {/* ✅ SKU 列 - 橙色高亮显示 */}
                           <td className="px-4 py-4">
                             {product.sku ? (
                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-orange-100 text-orange-700 text-xs font-bold border border-orange-200">
@@ -486,7 +503,7 @@ export default function App() {
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-3">
                               <button
-                                onClick={() => openQuickPreview(product)} // ✅ 改这里：点👁优先弹草稿预览
+                                onClick={() => openQuickPreview(product)}
                                 className="text-blue-600 hover:text-blue-800 transition-colors"
                                 title="查看详情/预览草稿"
                               >
@@ -532,6 +549,25 @@ export default function App() {
           <ContentDashboard products={products} currentUser={currentUser} onRefresh={loadData} />
         )}
 
+        {/* ✅ 新增：竞品分析列表页 */}
+        {activeTab === 'competitor_analysis' && canDev && (
+          <CompetitorAnalysisList
+            currentUser={currentUser}
+            onCreateNew={() => setShowCompetitorAnalysis(true)}
+            onViewDetail={(analysis) => {
+              // 查看详情：可以再次打开分析弹窗（只读模式）
+              console.log('查看分析详情:', analysis);
+              // 暂时用 alert，后续可以做详情页
+              alert(`查看分析报告: ${analysis.title}\n\n核心结论: ${analysis.summary?.conclusion || '暂无'}`);
+            }}
+            onUseForProduct={(analysis) => {
+              // 选中分析报告后，跳转到 AI 创建产品
+              setSelectedAnalysisForProduct(analysis);
+              setShowProductFormAI(true);
+            }}
+          />
+        )}
+
         {activeTab === 'ai_drafts' && canDev && (
           <AIDraftDashboard
             currentUser={currentUser}
@@ -540,7 +576,7 @@ export default function App() {
           />
         )}
 
-        {/* ✅ 用户管理：不出现在业务 Tab，只从右上角管理员菜单进入 */}
+        {/* 用户管理：不出现在业务 Tab，只从右上角管理员菜单进入 */}
         {activeTab === 'users' && isAdmin && (
           <UserManagement currentUser={currentUser} />
         )}
@@ -557,8 +593,12 @@ export default function App() {
       {showProductFormAI && (
         <ProductFormAI
           currentUser={currentUser}
-          onClose={() => setShowProductFormAI(false)}
+          onClose={() => {
+            setShowProductFormAI(false)
+            setSelectedAnalysisForProduct(null) // ✅ 关闭时清空选中的分析
+          }}
           onSuccess={handleAICreateSuccess}
+          preSelectedAnalysis={selectedAnalysisForProduct} // ✅ 传入预选的竞品分析
         />
       )}
 
@@ -583,7 +623,7 @@ export default function App() {
         />
       )}
 
-      {/* ✅ 新增：快速预览弹窗（不会影响原审核/接单功能） */}
+      {/* 快速预览弹窗（不会影响原审核/接单功能） */}
       {quickPreviewOpen && quickPreviewDraft && (
         <DraftReviewModal
           draft={quickPreviewDraft}
@@ -593,6 +633,18 @@ export default function App() {
             setQuickPreviewOpen(false)
             setQuickPreviewDraft(null)
             setQuickPreviewProduct(null)
+          }}
+        />
+      )}
+
+      {/* ✅ 新增：竞品分析弹窗 */}
+      {showCompetitorAnalysis && (
+        <CompetitorAnalysis
+          currentUser={currentUser}
+          onClose={() => setShowCompetitorAnalysis(false)}
+          onSuccess={() => {
+            setShowCompetitorAnalysis(false)
+            // 如果当前在竞品分析页，会自动刷新（因为 CompetitorAnalysisList 内部有 useEffect）
           }}
         />
       )}
