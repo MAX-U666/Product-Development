@@ -1,84 +1,154 @@
 // src/CompetitorAnalysisList.jsx
-// 竞品分析报告列表页面
-// 2026-01-31
-
+// 竞品分析库 - 列表页面（使用真实API）
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, Plus, Eye, Trash2, Calendar, Tag, 
-  TrendingUp, FileText, ArrowRight, Filter
-} from 'lucide-react';
+import { Search, Plus, Eye, Trash2, ArrowRight, Filter } from 'lucide-react';
+import { fetchCompetitorAnalyses, deleteCompetitorAnalysis } from './api';
 
-// ==================== 主组件 ====================
+// 品类选项
+const CATEGORIES = [
+  { value: 'all', label: '全部品类' },
+  { value: 'Shampoo', label: '洗发水' },
+  { value: 'Conditioner', label: '护发素' },
+  { value: 'BodyWash', label: '沐浴露' },
+  { value: 'BodyLotion', label: '身体乳' },
+  { value: 'Toothpaste', label: '牙膏' },
+  { value: 'HairMask', label: '发膜' },
+];
+
+// 市场选项
+const MARKETS = [
+  { value: 'all', label: '全部市场' },
+  { value: 'Indonesia', label: '🇮🇩 印尼' },
+  { value: 'Malaysia', label: '🇲🇾 马来西亚' },
+  { value: 'Thailand', label: '🇹🇭 泰国' },
+  { value: 'Philippines', label: '🇵🇭 菲律宾' },
+  { value: 'Vietnam', label: '🇻🇳 越南' },
+];
+
 export default function CompetitorAnalysisList({ 
+  currentUser, 
   onCreateNew, 
-  onViewDetail, 
-  onUseForProduct,
-  currentUser 
+  onViewDetail,
+  onUseForProduct 
 }) {
   const [analyses, setAnalyses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterMarket, setFilterMarket] = useState('all');
+  const [error, setError] = useState(null);
+  
+  // 筛选状态
+  const [searchText, setSearchText] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedMarket, setSelectedMarket] = useState('all');
 
   // 加载数据
   useEffect(() => {
     loadAnalyses();
-  }, []);
+  }, [selectedCategory, selectedMarket]);
 
-  async function loadAnalyses() {
+  const loadAnalyses = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // const data = await fetchCompetitorAnalyses();
-      // setAnalyses(data || []);
-      
-      // Mock 数据
-      setAnalyses(mockAnalyses);
+      const data = await fetchCompetitorAnalyses({
+        category: selectedCategory,
+        market: selectedMarket
+      });
+      setAnalyses(data);
     } catch (err) {
-      console.error('加载失败:', err);
+      console.error('加载竞品分析失败:', err);
+      setError('加载失败，请重试');
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  // 过滤
-  const filteredAnalyses = analyses.filter(a => {
-    const matchSearch = !searchTerm || 
-      a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCategory = filterCategory === 'all' || a.category === filterCategory;
-    const matchMarket = filterMarket === 'all' || a.market === filterMarket;
-    return matchSearch && matchCategory && matchMarket;
+  // 搜索过滤
+  const filteredAnalyses = analyses.filter(item => {
+    if (!searchText) return true;
+    const search = searchText.toLowerCase();
+    return (
+      item.title?.toLowerCase().includes(search) ||
+      item.category?.toLowerCase().includes(search) ||
+      item.summary?.conclusion?.toLowerCase().includes(search)
+    );
   });
 
-  // 删除
-  async function handleDelete(id) {
-    if (!confirm('确定删除这个竞品分析报告吗？')) return;
-    
+  // 删除分析
+  const handleDelete = async (analysis) => {
+    const ok = window.confirm(`确定删除「${analysis.title}」吗？\n\n⚠️ 删除后不可恢复。`);
+    if (!ok) return;
+
     try {
-      // await deleteCompetitorAnalysis(id);
-      setAnalyses(prev => prev.filter(a => a.id !== id));
+      await deleteCompetitorAnalysis(analysis.id);
+      setAnalyses(prev => prev.filter(a => a.id !== analysis.id));
     } catch (err) {
-      alert('删除失败: ' + err.message);
+      console.error('删除失败:', err);
+      alert('删除失败：' + err.message);
     }
-  }
+  };
+
+  // 格式化日期
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  };
+
+  // 获取品类标签颜色
+  const getCategoryColor = (category) => {
+    const colors = {
+      'Shampoo': { bg: '#dbeafe', text: '#1d4ed8' },
+      'Conditioner': { bg: '#fce7f3', text: '#be185d' },
+      'BodyWash': { bg: '#d1fae5', text: '#047857' },
+      'BodyLotion': { bg: '#fef3c7', text: '#b45309' },
+      'Toothpaste': { bg: '#e0e7ff', text: '#4338ca' },
+      'HairMask': { bg: '#f3e8ff', text: '#7c3aed' },
+    };
+    return colors[category] || { bg: '#f3f4f6', text: '#374151' };
+  };
 
   return (
-    <div className="p-6">
+    <div style={{ padding: '0' }}>
       {/* 头部 */}
-      <div className="flex items-center justify-between mb-6">
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: '24px'
+      }}>
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <h1 style={{ 
+            fontSize: '24px', 
+            fontWeight: '700', 
+            color: '#1e293b',
+            margin: '0 0 8px 0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
             📊 竞品分析库
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
+          </h1>
+          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
             保存的竞品分析报告，可用于 AI 创建产品
           </p>
         </div>
         
         <button
           onClick={onCreateNew}
-          className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all flex items-center gap-2 font-semibold"
+          style={{
+            padding: '12px 20px',
+            borderRadius: '10px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+            color: 'white',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+          }}
         >
           <Plus size={18} />
           新建分析
@@ -86,218 +156,359 @@ export default function CompetitorAnalysisList({
       </div>
 
       {/* 搜索和筛选 */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center gap-4">
-          <div className="flex-1 relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="搜索报告标题、品类..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            />
-          </div>
-          
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm"
-          >
-            <option value="all">全部品类</option>
-            <option value="Shampoo">洗发水</option>
-            <option value="Toothpaste">牙膏</option>
-            <option value="BodyWash">沐浴露</option>
-            <option value="Skincare">护肤品</option>
-          </select>
-
-          <select
-            value={filterMarket}
-            onChange={(e) => setFilterMarket(e.target.value)}
-            className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm"
-          >
-            <option value="all">全部市场</option>
-            <option value="Indonesia">印尼</option>
-            <option value="Malaysia">马来西亚</option>
-            <option value="Thailand">泰国</option>
-          </select>
+      <div style={{
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '20px',
+        padding: '16px',
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0'
+      }}>
+        {/* 搜索框 */}
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={18} style={{ 
+            position: 'absolute', 
+            left: '12px', 
+            top: '50%', 
+            transform: 'translateY(-50%)',
+            color: '#94a3b8'
+          }} />
+          <input
+            type="text"
+            placeholder="搜索报告标题、品类..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 12px 10px 40px',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              fontSize: '14px',
+              color: '#1e293b',
+              boxSizing: 'border-box'
+            }}
+          />
         </div>
+
+        {/* 品类筛选 */}
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          style={{
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            fontSize: '14px',
+            color: '#1e293b',
+            backgroundColor: 'white',
+            cursor: 'pointer',
+            minWidth: '140px'
+          }}
+        >
+          {CATEGORIES.map(c => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+
+        {/* 市场筛选 */}
+        <select
+          value={selectedMarket}
+          onChange={(e) => setSelectedMarket(e.target.value)}
+          style={{
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            fontSize: '14px',
+            color: '#1e293b',
+            backgroundColor: 'white',
+            cursor: 'pointer',
+            minWidth: '140px'
+          }}
+        >
+          {MARKETS.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
       </div>
 
-      {/* 列表 */}
-      {loading ? (
-        <div className="text-center py-12 text-gray-500">
-          加载中...
+      {/* 加载状态 */}
+      {loading && (
+        <div style={{
+          padding: '60px',
+          textAlign: 'center',
+          color: '#64748b'
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
+          <p>加载中...</p>
         </div>
-      ) : filteredAnalyses.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 mb-2">暂无竞品分析报告</p>
-          <p className="text-sm text-gray-400 mb-4">
-            创建竞品分析，为 AI 产品开发提供数据支撑
+      )}
+
+      {/* 错误状态 */}
+      {error && (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          backgroundColor: '#fef2f2',
+          borderRadius: '12px',
+          color: '#dc2626'
+        }}>
+          <p>{error}</p>
+          <button
+            onClick={loadAnalyses}
+            style={{
+              marginTop: '12px',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1px solid #dc2626',
+              backgroundColor: 'white',
+              color: '#dc2626',
+              cursor: 'pointer'
+            }}
+          >
+            重试
+          </button>
+        </div>
+      )}
+
+      {/* 空状态 */}
+      {!loading && !error && filteredAnalyses.length === 0 && (
+        <div style={{
+          padding: '60px',
+          textAlign: 'center',
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📊</div>
+          <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '20px' }}>
+            {searchText ? '没有找到匹配的分析报告' : '还没有竞品分析报告'}
           </p>
           <button
             onClick={onCreateNew}
-            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
+            style={{
+              padding: '12px 24px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              color: 'white',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
           >
-            <Plus size={16} />
-            新建分析
+            创建第一个分析
           </button>
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {filteredAnalyses.map(analysis => (
-            <AnalysisCard
-              key={analysis.id}
-              analysis={analysis}
-              onView={() => onViewDetail?.(analysis)}
-              onDelete={() => handleDelete(analysis.id)}
-              onUseForProduct={() => onUseForProduct?.(analysis)}
-            />
-          ))}
+      )}
+
+      {/* 分析列表 */}
+      {!loading && !error && filteredAnalyses.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filteredAnalyses.map(analysis => {
+            const categoryColor = getCategoryColor(analysis.category);
+            const competitorCount = analysis.competitors?.length || 0;
+            
+            // 从 summary 或 opportunities 中提取关键信息
+            const keyFindings = [];
+            if (analysis.pain_points_summary?.[0]) {
+              keyFindings.push(`🔴 ${analysis.pain_points_summary[0].category || analysis.pain_points_summary[0]}`);
+            }
+            if (analysis.summary?.priceRange) {
+              keyFindings.push(`💰 价格带 ${analysis.summary.priceRange}`);
+            }
+            if (analysis.opportunities?.[0]) {
+              keyFindings.push(`💡 ${analysis.opportunities[0].suggestion || analysis.opportunities[0]}`);
+            }
+
+            return (
+              <div
+                key={analysis.id}
+                style={{
+                  padding: '20px',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: '20px'
+                }}
+              >
+                {/* 左侧：内容 */}
+                <div style={{ flex: 1 }}>
+                  {/* 标题行 */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px',
+                    marginBottom: '8px'
+                  }}>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: '16px', 
+                      fontWeight: '600',
+                      color: '#1e293b'
+                    }}>
+                      {analysis.title}
+                    </h3>
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      backgroundColor: categoryColor.bg,
+                      color: categoryColor.text
+                    }}>
+                      {analysis.category}
+                    </span>
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569'
+                    }}>
+                      {analysis.market}
+                    </span>
+                  </div>
+
+                  {/* 结论摘要 */}
+                  <p style={{ 
+                    margin: '0 0 12px 0', 
+                    fontSize: '14px', 
+                    color: '#64748b',
+                    lineHeight: '1.5'
+                  }}>
+                    {analysis.summary?.conclusion || '暂无分析结论'}
+                  </p>
+
+                  {/* 元数据 */}
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '16px', 
+                    fontSize: '12px', 
+                    color: '#94a3b8',
+                    marginBottom: '10px'
+                  }}>
+                    <span>📅 {formatDate(analysis.created_at)}</span>
+                    <span>🔗 {competitorCount} 个竞品</span>
+                    <span>↗️ 已使用 {analysis.used_count || 0} 次</span>
+                  </div>
+
+                  {/* 关键发现标签 */}
+                  {keyFindings.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {keyFindings.map((finding, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            backgroundColor: '#fef3c7',
+                            color: '#b45309'
+                          }}
+                        >
+                          {finding}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 右侧：操作按钮 */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '8px',
+                  minWidth: '120px'
+                }}>
+                  <button
+                    onClick={() => onViewDetail?.(analysis)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                      color: 'white',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Eye size={14} />
+                    查看
+                  </button>
+                  
+                  <button
+                    onClick={() => onUseForProduct?.(analysis)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: 'white',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <ArrowRight size={14} />
+                    用于创建产品
+                  </button>
+                  
+                  <button
+                    onClick={() => handleDelete(analysis)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: 'white',
+                      color: '#64748b',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    删除
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 统计信息 */}
+      {!loading && filteredAnalyses.length > 0 && (
+        <div style={{
+          marginTop: '20px',
+          padding: '12px 16px',
+          backgroundColor: '#f8fafc',
+          borderRadius: '8px',
+          fontSize: '13px',
+          color: '#64748b',
+          textAlign: 'center'
+        }}>
+          共 {filteredAnalyses.length} 个分析报告
+          {(selectedCategory !== 'all' || selectedMarket !== 'all' || searchText) && (
+            <span>（已筛选）</span>
+          )}
         </div>
       )}
     </div>
   );
 }
-
-// 分析卡片
-function AnalysisCard({ analysis, onView, onDelete, onUseForProduct }) {
-  const categoryColors = {
-    Shampoo: { bg: 'bg-blue-100', text: 'text-blue-700' },
-    Toothpaste: { bg: 'bg-green-100', text: 'text-green-700' },
-    BodyWash: { bg: 'bg-purple-100', text: 'text-purple-700' },
-    Skincare: { bg: 'bg-pink-100', text: 'text-pink-700' },
-  };
-
-  const colors = categoryColors[analysis.category] || { bg: 'bg-gray-100', text: 'text-gray-700' };
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          {/* 标题和标签 */}
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className="text-lg font-semibold text-gray-800">
-              {analysis.title}
-            </h3>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
-              {analysis.category}
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              {analysis.market}
-            </span>
-          </div>
-
-          {/* 核心结论 */}
-          <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-            {analysis.summary?.conclusion || '暂无结论'}
-          </p>
-
-          {/* 元信息 */}
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <span className="flex items-center gap-1">
-              <Calendar size={12} />
-              {new Date(analysis.created_at).toLocaleDateString('zh-CN')}
-            </span>
-            <span className="flex items-center gap-1">
-              <Tag size={12} />
-              {analysis.competitors_count || 0} 个竞品
-            </span>
-            <span className="flex items-center gap-1">
-              <TrendingUp size={12} />
-              已使用 {analysis.used_count || 0} 次
-            </span>
-          </div>
-
-          {/* 关键发现 */}
-          {analysis.key_findings && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {analysis.key_findings.slice(0, 3).map((finding, i) => (
-                <span 
-                  key={i}
-                  className="px-2 py-1 bg-yellow-50 text-yellow-700 rounded text-xs"
-                >
-                  💡 {finding}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex flex-col gap-2 ml-4">
-          <button
-            onClick={onView}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
-          >
-            <Eye size={14} />
-            查看
-          </button>
-          
-          <button
-            onClick={onUseForProduct}
-            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow text-sm font-medium flex items-center gap-2"
-          >
-            <ArrowRight size={14} />
-            用于创建产品
-          </button>
-
-          <button
-            onClick={onDelete}
-            className="px-4 py-2 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 text-sm flex items-center gap-2"
-          >
-            <Trash2 size={14} />
-            删除
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Mock 数据
-const mockAnalyses = [
-  {
-    id: 'ca_001',
-    title: '印尼竹炭牙膏竞品分析 - 2026.01',
-    category: 'Toothpaste',
-    market: 'Indonesia',
-    platform: 'Shopee',
-    created_at: '2026-01-30T10:00:00Z',
-    competitors_count: 3,
-    used_count: 2,
-    summary: {
-      conclusion: '印尼竹炭牙膏市场处于快速增长期，头部产品存在明显的效果预期管理和性价比痛点，建议通过包装升级+复合配方+合理定价切入市场。'
-    },
-    key_findings: ['效果预期是最大痛点', '价格带 28K-80K', '泵头包装是差异化机会']
-  },
-  {
-    id: 'ca_002',
-    title: '马来西亚防脱洗发水竞品分析',
-    category: 'Shampoo',
-    market: 'Malaysia',
-    platform: 'Shopee',
-    created_at: '2026-01-25T14:30:00Z',
-    competitors_count: 4,
-    used_count: 1,
-    summary: {
-      conclusion: '马来西亚防脱洗发水市场竞争激烈，本土品牌和国际品牌并存，生姜和咖啡因是主流成分，建议从迷迭香+益生菌组合切入。'
-    },
-    key_findings: ['生姜成分最热门', '价格敏感度高', '清真认证是加分项']
-  },
-  {
-    id: 'ca_003',
-    title: '印尼身体乳竞品分析',
-    category: 'BodyWash',
-    market: 'Indonesia',
-    platform: 'Tokopedia',
-    created_at: '2026-01-20T09:15:00Z',
-    competitors_count: 3,
-    used_count: 0,
-    summary: {
-      conclusion: '身体乳市场以补水保湿为主，美白和香味是差异化方向。'
-    },
-    key_findings: ['补水是基础需求', '香味持久度是卖点', '大容量更受欢迎']
-  }
-];
