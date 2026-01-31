@@ -1,10 +1,10 @@
 /**
  * /api/extract-competitor
  * 
- * 优化版 V3：
- * - 改进价格提取 Prompt
- * - 增强对印尼盾价格格式的处理
- * - 先抓取 HTML 再让 AI 分析
+ * V4 版本：
+ * - 支持 Shopee API 直接获取商品数据
+ * - 从 URL 解析 shop_id 和 item_id
+ * - 调用 Shopee 内部 API 获取完整数据
  */
 
 import { readJson, sendJson, requirePost, normalizeProvider } from "./_utils.js";
@@ -29,6 +29,307 @@ function safeParseJson(text) {
   }
 }
 
+// ========== 从 Shopee URL 解析 ID ==========
+
+function parseShopeeUrl(url) {
+  // Shopee URL 格式：
+  // https://shopee.co.id/产品名-i.{shop_id}.{item_id}
+  // https://shopee.co.id/product/{shop_id}/{item_id}
+  
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+    
+    // 判断是否是 Shopee
+    if (!hostname.includes('shopee.')) {
+      return null;
+    }
+    
+    // 获取国家代码
+    const countryMatch = hostname.match(/shopee\.(\w+)/);
+    const country = countryMatch ? countryMatch[1] : 'co.id';
+    
+    const pathname = urlObj.pathname;
+    
+    // 格式1: /产品名-i.{shop_id}.{item_id}
+    const match1 = pathname.match(/-i\.(\d+)\.(\d+)/);
+    if (match1) {
+      return {
+        platform: 'shopee',
+        country,
+        shopId: match1[1],
+        itemId: match1[2]
+      };
+    }
+    
+    // 格式2: /product/{shop_id}/{item_id}
+    const match2 = pathname.match(/\/product\/(\d+)\/(\d+)/);
+    if (match2) {
+      return {
+        platform: 'shopee',
+        country,
+        shopId: match2[1],
+        itemId: match2[2]
+      };
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ========== 调用 Shopee API ==========
+
+async function fetchShopeeProduct(shopId, itemId, country = 'co.id') {
+  // Shopee API 地址根据国家不同
+  const apiDomains = {
+    'co.id': 'shopee.co.id',
+    'com.my': 'shopee.com.my',
+    'co.th': 'shopee.co.th',
+    'ph': 'shopee.ph',
+    'vn': 'shopee.vn',
+    'sg': 'shopee.sg',
+    'tw': 'shopee.tw',
+    'com.br': 'shopee.com.br',
+  };
+  
+  const domain = apiDomains[country] || 'shopee.co.id';
+  const apiUrl = `https://${domain}/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`;
+  
+  console.log(`📡 调用 Shopee API: ${apiUrl}`);
+  
+  const res = await fetch(apiUrl, {
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+      'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
+      'Referer': `https://${domain}/`,
+      'af-ac-enc-dat': 'null',
+    },
+  });
+  
+  if (!res.ok) {
+    throw new Error(`Shopee API 请求失败: ${res.status}`);
+  }
+  
+  const json = await res.json();
+  
+  if (json.error || !json.data) {
+    throw new Error(`Shopee API 返回错误: ${json.error_msg || JSON.stringify(json)}`);
+  }
+  
+  return json.data;
+}
+
+// ========== 解析 Shopee 数据 ==========
+
+function parseShopeeData(data, url) {
+  const item = data;
+  
+  // 价格处理（Shopee 价格单位是 100000，即除以 100000 得到实际价格）
+  // 实际上印尼的价格单位是除以 100000 后再乘以 1（即直接除以 100000）
+  const priceUnit = 100000;
+  const price = item.price ? Math.round(item.price / priceUnit) : 0;
+  const originalPrice = item.price_before_discount ? Math.round(item.price_before_discount / priceUnit) : 0;
+  const priceMin = item.price_min ? Math.round(item.price_min / priceUnit) : price;
+  const priceMax = item.price_max ? Math.round(item.price_max / priceUnit) : price;
+  
+  // 格式化价格
+  const formatPrice = (p) => p > 0 ? `Rp ${p.toLocaleString('id-ID')}` : '';
+  
+  // 评分
+  const rating = item.item_rating?.rating_star 
+    ? item.item_rating.rating_star.toFixed(1) 
+    : '';
+  
+  // 评论数
+  const reviewCount = item.item_rating?.rating_count?.[0] || item.cmt_count || 0;
+  
+  // 销量
+  const sales = item.sold || item.historical_sold || 0;
+  const salesText = sales >= 1000 
+    ? `${(sales / 1000).toFixed(1)}rb terjual` 
+    : `${sales} terjual`;
+  
+  // 提取卖点（从描述中）
+  const description = item.description || '';
+  const sellingPoints = extractSellingPoints(description, item.name);
+  
+  // 提取成分（从描述中）
+  const ingredients = extractIngredients(description);
+  
+  // 规格/容量
+  const volume = extractVolume(item.name, description);
+  
+  // 品牌
+  const brand = item.brand || extractBrand(item.name) || '';
+  
+  return {
+    name: item.name || '',
+    brand: brand,
+    price: formatPrice(priceMin || price),
+    original_price: originalPrice > price ? formatPrice(originalPrice) : '',
+    price_min: formatPrice(priceMin),
+    price_max: formatPrice(priceMax),
+    volume: volume,
+    sales: salesText,
+    rating: rating,
+    review_count: reviewCount > 0 ? reviewCount.toLocaleString() : '',
+    
+    title: item.name || '',
+    title_keywords: extractKeywords(item.name),
+    
+    selling_points: sellingPoints,
+    ingredients: ingredients,
+    
+    // 图片
+    image: item.image ? `https://down-id.img.susercontent.com/file/${item.image}` : '',
+    images: (item.images || []).map(img => `https://down-id.img.susercontent.com/file/${img}`),
+    
+    // 店铺信息
+    shop_name: item.shop_name || '',
+    shop_id: item.shopid,
+    item_id: item.itemid,
+    
+    // 分类
+    categories: (item.categories || []).map(c => c.display_name),
+    
+    // 库存
+    stock: item.stock || 0,
+    
+    // 描述（用于 AI 分析）
+    description: description.slice(0, 2000),
+    
+    source_url: url,
+    
+    // 原始数据（用于调试）
+    _raw_price: item.price,
+    _raw_price_min: item.price_min,
+  };
+}
+
+// ========== 辅助函数 ==========
+
+function extractSellingPoints(description, name) {
+  const points = [];
+  
+  // 从描述中提取要点
+  const lines = description.split('\n').filter(l => l.trim());
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // 找以 ✓ ✔ ★ • - 等开头的行
+    if (/^[✓✔★•\-\d\.]+/.test(trimmed) && trimmed.length > 5 && trimmed.length < 100) {
+      points.push(trimmed.replace(/^[✓✔★•\-\d\.]+\s*/, ''));
+    }
+  }
+  
+  // 如果描述中没有，从标题中提取关键词
+  if (points.length === 0) {
+    const keywords = ['Moisturizing', 'Whitening', 'Anti-Aging', 'Hydrating', 'Natural', 
+                      'Organic', 'BPOM', 'Halal', 'Original', 'Premium'];
+    const nameLower = (name + ' ' + description).toLowerCase();
+    for (const kw of keywords) {
+      if (nameLower.includes(kw.toLowerCase())) {
+        points.push(kw);
+      }
+    }
+  }
+  
+  return points.slice(0, 5);
+}
+
+function extractIngredients(description) {
+  const ingredients = [];
+  const descLower = description.toLowerCase();
+  
+  // 常见成分关键词
+  const commonIngredients = [
+    { name: 'Niacinamide', benefit: '美白提亮' },
+    { name: 'Hyaluronic Acid', benefit: '保湿补水' },
+    { name: 'Vitamin C', benefit: '抗氧化美白' },
+    { name: 'Vitamin E', benefit: '滋润抗氧化' },
+    { name: 'Retinol', benefit: '抗皱紧致' },
+    { name: 'Salicylic Acid', benefit: '去角质控油' },
+    { name: 'Aloe Vera', benefit: '舒缓镇静' },
+    { name: 'Collagen', benefit: '弹润紧致' },
+    { name: 'Centella Asiatica', benefit: '修护舒缓' },
+    { name: 'Green Tea', benefit: '抗氧化' },
+    { name: 'Charcoal', benefit: '深层清洁' },
+    { name: 'Kemiri', benefit: '滋养发根' },
+    { name: 'Minyak Kemiri', benefit: '护发生发' },
+    { name: 'Ginseng', benefit: '滋补养护' },
+    { name: 'Argan Oil', benefit: '滋润修护' },
+    { name: 'Tea Tree', benefit: '控油祛痘' },
+    { name: 'Glycerin', benefit: '保湿锁水' },
+  ];
+  
+  for (const ing of commonIngredients) {
+    if (descLower.includes(ing.name.toLowerCase())) {
+      ingredients.push(ing);
+    }
+  }
+  
+  return ingredients.slice(0, 6);
+}
+
+function extractVolume(name, description) {
+  const text = name + ' ' + description;
+  
+  // 匹配容量模式
+  const patterns = [
+    /(\d+)\s*(ml|ML|mL)/i,
+    /(\d+)\s*(g|gr|gram)/i,
+    /(\d+)\s*(oz|OZ)/i,
+    /(\d+)\s*(pcs|PCS|Pcs)/i,
+  ];
+  
+  for (const p of patterns) {
+    const match = text.match(p);
+    if (match) {
+      return match[0];
+    }
+  }
+  
+  return '';
+}
+
+function extractBrand(name) {
+  // 常见品牌
+  const brands = ['BIOAQUA', 'LAIKOU', 'IMAGES', 'SOME BY MI', 'COSRX', 'SKINTIFIC',
+                  'WARDAH', 'EMINA', 'GARNIER', 'POND\'S', 'NIVEA', 'VASELINE',
+                  'LOREAL', 'MAYBELLINE', 'INNISFREE', 'NATURE REPUBLIC', 'ETUDE',
+                  'THE ORDINARY', 'CERAVE', 'LOLA ROSE', 'ZADA', 'SCARLETT'];
+  
+  const nameLower = name.toLowerCase();
+  for (const brand of brands) {
+    if (nameLower.includes(brand.toLowerCase())) {
+      return brand;
+    }
+  }
+  
+  // 尝试提取第一个单词作为品牌
+  const firstWord = name.split(/[\s\-\/]/)[0];
+  if (firstWord && firstWord.length > 2 && firstWord.length < 20) {
+    return firstWord;
+  }
+  
+  return '';
+}
+
+function extractKeywords(name) {
+  // 移除品牌和常见词，提取关键词
+  const stopWords = ['dan', 'untuk', 'dengan', 'the', 'and', 'for', 'with', 'original', 'ori'];
+  const words = name.split(/[\s\-\/\|]+/).filter(w => 
+    w.length > 2 && 
+    !stopWords.includes(w.toLowerCase()) &&
+    !/^\d+$/.test(w)
+  );
+  
+  return words.slice(0, 8);
+}
+
 // ========== AI 调用函数 ==========
 
 async function callGemini(prompt) {
@@ -37,14 +338,8 @@ async function callGemini(prompt) {
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
 
   const body = {
-    contents: [{
-      role: "user",
-      parts: [{ text: prompt }]
-    }],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 4096,
-    },
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
   };
 
   const res = await fetch(apiUrl, {
@@ -55,77 +350,26 @@ async function callGemini(prompt) {
 
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    const msg = json?.error?.message || JSON.stringify(json) || `HTTP_${res.status}`;
-    throw new Error(`GEMINI_ERROR:${msg}`);
+    throw new Error(`GEMINI_ERROR:${json?.error?.message || res.status}`);
   }
 
-  const text = json?.candidates?.[0]?.content?.parts?.map(p => p?.text).filter(Boolean).join("") || "";
-  return text.trim();
+  return json?.candidates?.[0]?.content?.parts?.map(p => p?.text).filter(Boolean).join("") || "";
 }
 
 async function callQwen(prompt) {
   const key = requireEnv("DASHSCOPE_API_KEY");
   const model = process.env.DASHSCOPE_MODEL || "qwen-max";
   const baseURL = process.env.DASHSCOPE_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1";
-  const url = `${baseURL}/chat/completions`;
 
-  const res = await fetch(url, {
+  const res = await fetch(`${baseURL}/chat/completions`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-    }),
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
   });
+  
   const json = await res.json();
   if (!res.ok) throw new Error(`QWEN_ERROR:${json.error?.message || JSON.stringify(json)}`);
   return json.choices?.[0]?.message?.content?.trim() || "";
-}
-
-async function callDeepSeek(prompt) {
-  const key = requireEnv("DEEPSEEK_API_KEY");
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(`DEEPSEEK_ERROR:${json.error?.message || JSON.stringify(json)}`);
-  return json.choices?.[0]?.message?.content?.trim() || "";
-}
-
-async function callClaude(prompt) {
-  const key = requireEnv("ANTHROPIC_API_KEY");
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 4000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  const json = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(`CLAUDE_ERROR:${json?.error?.message || JSON.stringify(json)}`);
-  return json?.content?.filter(c => c?.type === "text")?.map(c => c?.text)?.join("") || "";
 }
 
 // ========== 主处理函数 ==========
@@ -143,281 +387,181 @@ export default async function handler(req, res) {
       return;
     }
 
-    console.log(`📤 提取竞品: ${url}, provider: ${provider}`);
+    console.log(`📤 提取竞品: ${url}`);
 
-    // 1. 先抓取 HTML
+    // 1. 尝试解析 Shopee URL
+    const shopeeInfo = parseShopeeUrl(url);
+    
+    if (shopeeInfo) {
+      console.log(`🛒 识别为 Shopee 链接: shop=${shopeeInfo.shopId}, item=${shopeeInfo.itemId}`);
+      
+      try {
+        // 调用 Shopee API
+        const shopeeData = await fetchShopeeProduct(shopeeInfo.shopId, shopeeInfo.itemId, shopeeInfo.country);
+        const parsed = parseShopeeData(shopeeData, url);
+        
+        console.log(`✅ Shopee API 成功: ${parsed.name}, 价格: ${parsed.price}`);
+        
+        // 如果需要深度分析，调用 AI
+        if (body?.deep_analysis) {
+          const aiAnalysis = await analyzeWithAI(parsed, provider);
+          Object.assign(parsed, aiAnalysis);
+        }
+        
+        sendJson(res, 200, {
+          success: true,
+          provider: 'shopee_api',
+          data: parsed,
+        });
+        return;
+        
+      } catch (apiError) {
+        console.log(`⚠️ Shopee API 失败: ${apiError.message}，降级到 HTML 抓取`);
+        // 继续使用 HTML 抓取方式
+      }
+    }
+
+    // 2. 非 Shopee 或 API 失败，使用 HTML 抓取 + AI 分析
     const html = await fetchHtml(url);
     console.log(`📥 HTML 长度: ${html.length}`);
 
-    // 2. 构建 Prompt
     const prompt = buildAnalysisPrompt(url, html);
-
-    // 3. 调用 AI
+    
     let raw = "";
-    if (provider === "gemini") {
-      raw = await callGemini(prompt);
-    } else if (provider === "qwen") {
+    if (provider === "qwen") {
       raw = await callQwen(prompt);
-    } else if (provider === "deepseek") {
-      raw = await callDeepSeek(prompt);
-    } else if (provider === "claude") {
-      raw = await callClaude(prompt);
     } else {
       raw = await callGemini(prompt);
     }
 
-    console.log(`📥 AI 返回长度: ${raw.length}`);
-
-    // 4. 解析 JSON
     const obj = safeParseJson(raw);
     
-    if (!obj || typeof obj !== "object") {
-      // 如果不是 JSON，尝试从文本中提取
-      console.log("⚠️ AI 返回非 JSON，尝试文本提取");
+    if (!obj) {
       sendJson(res, 200, {
         success: true,
         provider,
-        data: {
-          name: extractField(raw, "产品名称") || extractField(raw, "name") || "",
-          price: extractField(raw, "价格") || extractField(raw, "price") || "",
-          raw_analysis: raw,
-          source_url: url
-        },
+        data: { name: "", price: "", raw_analysis: raw, source_url: url },
         raw_response: raw
       });
       return;
     }
 
-    // 5. 标准化并返回
-    const result = normalizeResult(obj, url);
-    console.log(`✅ 提取成功: ${result.name}, 价格: ${result.price}`);
-    
     sendJson(res, 200, {
       success: true,
       provider,
-      data: result,
+      data: normalizeResult(obj, url),
     });
 
   } catch (e) {
-    const msg = String(e?.message || e);
-    console.error("❌ Extract error:", msg);
-    sendJson(res, 500, { success: false, error: msg });
+    console.error("❌ Extract error:", e.message);
+    sendJson(res, 500, { success: false, error: e.message });
   }
 }
 
-// ========== 抓取 HTML ==========
+// ========== HTML 抓取 ==========
 
 async function fetchHtml(url) {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
     const r = await fetch(url, {
       method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.9,id;q=0.8,zh-CN;q=0.7,zh;q=0.6",
-        "accept-encoding": "gzip, deflate, br",
-        "cache-control": "no-cache",
-        "sec-ch-ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate",
-        "sec-fetch-site": "none",
-        "sec-fetch-user": "?1",
-        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "accept": "text/html",
       },
     });
-
-    clearTimeout(timeout);
-
     let html = await r.text().catch(() => "");
-    
-    // 限制长度但保留关键部分
-    if (html.length > 120000) {
-      // 尝试保留价格和产品信息相关的部分
-      const priceSection = html.match(/<script[^>]*>[\s\S]*?price[\s\S]*?<\/script>/gi)?.join('\n') || '';
-      const productSection = html.match(/<script[^>]*>[\s\S]*?product[\s\S]*?<\/script>/gi)?.join('\n') || '';
-      html = html.slice(0, 80000) + '\n---SCRIPTS---\n' + priceSection.slice(0, 20000) + productSection.slice(0, 20000);
-    }
-    
+    if (html.length > 100000) html = html.slice(0, 100000);
     return html;
-  } catch (e) {
-    console.error("Fetch HTML error:", e.message);
+  } catch {
     return "";
   }
 }
 
-// ========== 从文本中提取字段 ==========
+// ========== AI 深度分析 ==========
 
-function extractField(text, fieldName) {
-  const patterns = [
-    new RegExp(`"${fieldName}"\\s*:\\s*"([^"]+)"`, 'i'),
-    new RegExp(`${fieldName}[：:：]\\s*([^\\n]+)`, 'i'),
-    new RegExp(`\\*\\*${fieldName}\\*\\*[：:：]?\\s*([^\\n]+)`, 'i'),
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m && m[1]) return m[1].trim();
-  }
-  return "";
-}
+async function analyzeWithAI(productData, provider) {
+  const prompt = `
+分析以下商品数据，生成差评痛点和差异化机会：
 
-// ========== 深度分析 Prompt ==========
+商品名称: ${productData.name}
+价格: ${productData.price}
+描述: ${productData.description}
+卖点: ${productData.selling_points?.join(', ')}
+成分: ${productData.ingredients?.map(i => i.name).join(', ')}
 
-function buildAnalysisPrompt(url, html) {
-  // 从 HTML 中提取一些有用的信息
-  const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
-  const jsonLdData = jsonLdMatch ? jsonLdMatch[1] : '';
-  
-  // 尝试找价格相关的数据
-  const pricePatterns = [
-    /\"price\"\s*:\s*(\d[\d.,]*)/gi,
-    /\"salePrice\"\s*:\s*(\d[\d.,]*)/gi,
-    /\"discountedPrice\"\s*:\s*(\d[\d.,]*)/gi,
-    /Rp\s*([\d.,]+)/gi,
-    /IDR\s*([\d.,]+)/gi,
-  ];
-  
-  const foundPrices = [];
-  for (const pattern of pricePatterns) {
-    let match;
-    while ((match = pattern.exec(html)) !== null) {
-      foundPrices.push(match[1]);
-    }
-  }
-  
-  // 去重并取前5个
-  const uniquePrices = [...new Set(foundPrices)].slice(0, 5);
-
-  return `
-你是专业的"电商竞品深度分析师"。请分析以下商品页面数据。
-
-## 商品链接
-${url}
-
-## 页面中发现的价格数据
-${uniquePrices.length > 0 ? uniquePrices.join(', ') : '未找到明确价格数据'}
-
-## JSON-LD 结构化数据
-${jsonLdData ? jsonLdData.slice(0, 3000) : '无'}
-
-## 页面 HTML（部分）
-${html.slice(0, 60000)}
-
----
-
-## 你的任务
-
-从上述数据中提取商品信息。**特别注意价格**：
-- 印尼盾价格通常是 5-6 位数，如 Rp 27.600 表示 27,600 印尼盾
-- 价格中的 "." 是千位分隔符，不是小数点
-- 例如：Rp 18.500 = Rp 18,500（一万八千五百）
-- 例如：Rp 127.000 = Rp 127,000（十二万七千）
-
-## 输出要求
-
-只输出 JSON，不要任何解释：
-
+请输出 JSON：
 {
-  "name": "产品名称（简洁版本，不超过50字）",
-  "brand": "品牌名",
-  "price": "当前售价（完整格式，如 Rp 27,600 或 Rp 127,000）",
-  "original_price": "原价（如有划线价）",
-  "volume": "规格/容量（如 100ml, 500g）",
-  "sales": "销量（如 1.2rb terjual, 500+ sold）",
-  "rating": "评分（如 4.8）",
-  "review_count": "评论数",
-  
-  "title": "完整标题原文",
-  "title_keywords": ["关键词1", "关键词2", "关键词3"],
-  
-  "selling_points": [
-    "卖点1",
-    "卖点2",
-    "卖点3"
-  ],
-  
-  "ingredients": [
-    {"name": "成分名", "benefit": "功效"}
-  ],
-  
   "pain_points": [
-    {"category": "痛点分类", "description": "描述", "frequency": "频率"}
+    {"category": "分类", "description": "描述", "frequency": "高频/中频/低频"}
   ],
-  
   "opportunities": [
     {"dimension": "维度", "suggestion": "建议"}
   ],
-  
-  "price_positioning": "价格定位（高端/中端/性价比）",
+  "price_positioning": "价格定位",
+  "target_audience": "目标人群"
+}
+`.trim();
+
+  try {
+    const raw = provider === 'qwen' ? await callQwen(prompt) : await callGemini(prompt);
+    return safeParseJson(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
+// ========== Prompt 和结果处理 ==========
+
+function buildAnalysisPrompt(url, html) {
+  return `
+分析以下商品页面，提取信息并输出 JSON：
+
+URL: ${url}
+HTML: ${html.slice(0, 50000)}
+
+输出格式：
+{
+  "name": "产品名称",
+  "brand": "品牌",
+  "price": "价格（如 Rp 27,600）",
+  "original_price": "原价",
+  "volume": "规格",
+  "sales": "销量",
+  "rating": "评分",
+  "review_count": "评论数",
+  "title": "完整标题",
+  "title_keywords": ["关键词"],
+  "selling_points": ["卖点"],
+  "ingredients": [{"name": "成分", "benefit": "功效"}],
+  "pain_points": [{"category": "分类", "description": "描述", "frequency": "频率"}],
+  "opportunities": [{"dimension": "维度", "suggestion": "建议"}],
+  "price_positioning": "价格定位",
   "target_audience": "目标人群"
 }
 
-**重要提醒**：
-1. 价格必须保留完整的数字，如 Rp 27,600 不要写成 Rp 27 或 Rp 28
-2. 如果价格显示为 "18.500" 或 "18500"，应该输出 "Rp 18,500"
-3. 如果页面中有多个价格，取当前销售价（折后价）
+注意：印尼盾价格中的"."是千位分隔符，如 27.600 = 27,600
 `.trim();
 }
 
-// ========== 标准化结果 ==========
-
-function normalizeResult(obj, sourceUrl) {
-  // 修正价格格式
-  let price = obj.price || "";
-  let originalPrice = obj.original_price || "";
-  
-  // 如果价格看起来太小（比如小于100），可能是解析错误
-  const priceNum = parseFloat(String(price).replace(/[^0-9.]/g, ''));
-  if (priceNum > 0 && priceNum < 100) {
-    // 可能是千位被当成小数了，尝试修正
-    // 比如 "27.6" 应该是 "27,600"
-    const correctedPrice = Math.round(priceNum * 1000);
-    if (correctedPrice > 1000) {
-      price = `Rp ${correctedPrice.toLocaleString('id-ID')}`;
-    }
-  }
-  
-  // 确保价格有货币符号
-  if (price && !price.toLowerCase().includes('rp') && !price.toLowerCase().includes('idr')) {
-    const num = parseFloat(String(price).replace(/[^0-9.]/g, ''));
-    if (num > 0) {
-      price = `Rp ${num.toLocaleString('id-ID')}`;
-    }
-  }
-
+function normalizeResult(obj, url) {
   return {
     name: obj.name || "",
     brand: obj.brand || "",
-    price: price,
-    original_price: originalPrice,
+    price: obj.price || "",
+    original_price: obj.original_price || "",
     volume: obj.volume || "",
     sales: obj.sales || "",
     rating: obj.rating || "",
     review_count: obj.review_count || "",
-    
     title: obj.title || obj.name || "",
     title_keywords: Array.isArray(obj.title_keywords) ? obj.title_keywords : [],
-    title_analysis: obj.title_analysis || "",
-    
-    selling_points: Array.isArray(obj.selling_points) ? obj.selling_points : 
-                    Array.isArray(obj.benefits) ? obj.benefits : [],
+    selling_points: Array.isArray(obj.selling_points) ? obj.selling_points : [],
     ingredients: Array.isArray(obj.ingredients) ? obj.ingredients : [],
-    
     pain_points: Array.isArray(obj.pain_points) ? obj.pain_points : [],
     opportunities: Array.isArray(obj.opportunities) ? obj.opportunities : [],
-    
     price_positioning: obj.price_positioning || "",
     target_audience: obj.target_audience || "",
-    
-    source_url: obj.source_url || sourceUrl,
-    
-    // 兼容旧字段
+    source_url: url,
     benefits: Array.isArray(obj.selling_points) ? obj.selling_points : [],
   };
 }
