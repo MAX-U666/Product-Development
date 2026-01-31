@@ -569,6 +569,83 @@ export default function CompetitorAnalysis({ onClose, onSuccess, currentUser }) 
             </div>
           </div>
 
+          {/* AI 模型选择 */}
+          <div style={{
+            padding: '16px',
+            borderRadius: '12px',
+            backgroundColor: '#FFFFFF',
+            marginBottom: '16px',
+            border: '1px solid #8B5CF6'
+          }}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#1D1D1F' }}>
+              🤖 AI 模型配置
+            </h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: '#86868B', display: 'block', marginBottom: '4px' }}>
+                  提取模型（竞品数据）
+                </label>
+                <select
+                  value={aiConfig.extract_provider}
+                  onChange={(e) => setAiConfig({...aiConfig, extract_provider: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #E5E5EA',
+                    fontSize: '12px',
+                    backgroundColor: '#FAFAFA',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="qwen">🔮 通义千问 Qwen</option>
+                  <option value="gemini">✨ Google Gemini</option>
+                  <option value="deepseek">🔬 DeepSeek</option>
+                  <option value="claude">🧠 Claude</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: '#86868B', display: 'block', marginBottom: '4px' }}>
+                  分析模型（深度分析）
+                </label>
+                <select
+                  value={aiConfig.analyze_provider}
+                  onChange={(e) => setAiConfig({...aiConfig, analyze_provider: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #E5E5EA',
+                    fontSize: '12px',
+                    backgroundColor: '#FAFAFA',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="claude">🧠 Claude（推荐）</option>
+                  <option value="qwen">🔮 通义千问 Qwen</option>
+                  <option value="deepseek">🔬 DeepSeek</option>
+                  <option value="gemini">✨ Google Gemini</option>
+                </select>
+              </div>
+            </div>
+            
+            <div style={{ 
+              marginTop: '10px',
+              padding: '8px 10px', 
+              borderRadius: '6px', 
+              backgroundColor: '#F5F3FF', 
+              fontSize: '11px', 
+              color: '#7C3AED',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              💡 提取用 {aiConfig.extract_provider === 'qwen' ? '千问' : aiConfig.extract_provider === 'gemini' ? 'Gemini' : aiConfig.extract_provider === 'deepseek' ? 'DeepSeek' : 'Claude'}，
+              分析用 {aiConfig.analyze_provider === 'claude' ? 'Claude' : aiConfig.analyze_provider === 'qwen' ? '千问' : aiConfig.analyze_provider === 'deepseek' ? 'DeepSeek' : 'Gemini'}
+            </div>
+          </div>
+
           {/* 竞品链接输入 */}
           <div style={{
             padding: '16px',
