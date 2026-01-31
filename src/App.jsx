@@ -2,6 +2,7 @@
 // ✅ 2026-01-31 更新：添加竞品分析模块
 // - 新增 CompetitorAnalysis 竞品分析创建页面
 // - 新增 CompetitorAnalysisList 竞品分析列表页面
+// - 新增 CompetitorAnalysisDetail 竞品分析详情弹窗
 // - 新增 📊 竞品分析 Tab
 // - 支持从竞品分析跳转到 AI 创建产品
 
@@ -23,6 +24,7 @@ import UserManagement from './UserManagement'
 // ✅ 新增：竞品分析模块
 import CompetitorAnalysis from './CompetitorAnalysis'
 import CompetitorAnalysisList from './CompetitorAnalysisList'
+import CompetitorAnalysisDetail from './CompetitorAnalysisDetail'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -49,6 +51,7 @@ export default function App() {
   // ✅ 新增：竞品分析相关状态
   const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState(false)
   const [selectedAnalysisForProduct, setSelectedAnalysisForProduct] = useState(null)
+  const [viewingAnalysis, setViewingAnalysis] = useState(null) // ✅ 查看详情的分析报告
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser')
@@ -190,6 +193,13 @@ export default function App() {
       alert('读取 AI 草稿失败：' + (e?.message || e))
       setSelectedProduct(product)
     }
+  }
+
+  // ✅ 新增：从竞品分析跳转到 AI 创建产品
+  function handleUseAnalysisForProduct(analysis) {
+    setViewingAnalysis(null) // 关闭详情弹窗
+    setSelectedAnalysisForProduct(analysis)
+    setShowProductFormAI(true)
   }
 
   if (loading) {
@@ -555,15 +565,12 @@ export default function App() {
             currentUser={currentUser}
             onCreateNew={() => setShowCompetitorAnalysis(true)}
             onViewDetail={(analysis) => {
-              // 查看详情：可以再次打开分析弹窗（只读模式）
-              console.log('查看分析详情:', analysis);
-              // 暂时用 alert，后续可以做详情页
-              alert(`查看分析报告: ${analysis.title}\n\n核心结论: ${analysis.summary?.conclusion || '暂无'}`);
+              // ✅ 打开详情弹窗
+              setViewingAnalysis(analysis)
             }}
             onUseForProduct={(analysis) => {
               // 选中分析报告后，跳转到 AI 创建产品
-              setSelectedAnalysisForProduct(analysis);
-              setShowProductFormAI(true);
+              handleUseAnalysisForProduct(analysis)
             }}
           />
         )}
@@ -637,7 +644,7 @@ export default function App() {
         />
       )}
 
-      {/* ✅ 新增：竞品分析弹窗 */}
+      {/* ✅ 新增：竞品分析创建弹窗 */}
       {showCompetitorAnalysis && (
         <CompetitorAnalysis
           currentUser={currentUser}
@@ -646,6 +653,15 @@ export default function App() {
             setShowCompetitorAnalysis(false)
             // 如果当前在竞品分析页，会自动刷新（因为 CompetitorAnalysisList 内部有 useEffect）
           }}
+        />
+      )}
+
+      {/* ✅ 新增：竞品分析详情弹窗 */}
+      {viewingAnalysis && (
+        <CompetitorAnalysisDetail
+          analysis={viewingAnalysis}
+          onClose={() => setViewingAnalysis(null)}
+          onUseForProduct={handleUseAnalysisForProduct}
         />
       )}
     </div>
