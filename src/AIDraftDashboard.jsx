@@ -1,4 +1,4 @@
-// src/AIDraftDashboard.jsx
+// src/AIDraftDashboard.jsx1
 // 🔄 更新版本 - 添加已拒绝草稿重新编辑功能
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchAIDrafts } from "./api";
