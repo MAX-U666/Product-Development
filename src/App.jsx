@@ -1,4 +1,4 @@
-// File: src/App.jsx1
+// File: src/App.jsx
 // ✅ 2026-01-31 更新：添加竞品分析模块
 // - 新增 CompetitorAnalysis 竞品分析创建页面
 // - 新增 CompetitorAnalysisList 竞品分析列表页面
