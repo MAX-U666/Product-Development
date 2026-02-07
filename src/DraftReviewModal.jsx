@@ -1001,6 +1001,36 @@ export default function DraftReviewModal({
             </div>
           )}
 
+          {/* 开发修改的文案（复审时从 product 表读取，而非 draft 表） */}
+          {isDevAssetsReview && product && (
+            <div style={{
+              padding: '20px',
+              borderRadius: '12px',
+              backgroundColor: '#F0FDF4',
+              border: `1px solid #86efac`,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              marginTop: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: C.textPrimary }}>✏️ 开发修改的文案</div>
+                <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#22c55e', color: 'white', fontSize: '12px', fontWeight: '500' }}>最新版本</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {product.positioning && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>产品定位</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.positioning}</div></div>}
+                {product.selling_point && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>卖点简介</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.selling_point}</div></div>}
+                {product.ingredients && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>主要成分</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.ingredients}</div></div>}
+                {product.main_efficacy && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>主打功效</div><div style={{ fontSize: '13px', color: C.textPrimary, whiteSpace: 'pre-line' }}>{product.main_efficacy}</div></div>}
+                {product.scent && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>香味</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.scent}</div></div>}
+                {product.texture_color && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>料体颜色</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.texture_color}</div></div>}
+                {product.pricing && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>定价</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.pricing}</div></div>}
+                {product.volume && <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>容量</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.volume}</div></div>}
+                {product.product_title && <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>产品标题</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.product_title}</div></div>}
+                {product.seo_keywords && <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>搜索关键词</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.seo_keywords}</div></div>}
+                {product.packaging_design && <div style={{ gridColumn: 'span 2', padding: '12px', borderRadius: '8px', backgroundColor: '#FFFFFF', border: `1px solid ${C.borderLight}` }}><div style={{ fontSize: '11px', color: C.textTertiary, marginBottom: '4px' }}>包装设计需求</div><div style={{ fontSize: '13px', color: C.textPrimary }}>{product.packaging_design}</div></div>}
+              </div>
+            </div>
+          )}
+
           {/* 开发素材 */}
           {(bottleImg || refImgs.length > 0 || isDevAssetsReview) && (
             <div style={{
